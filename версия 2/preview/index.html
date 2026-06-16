@@ -1,0 +1,3325 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Высотность зданий Ленинградской области</title>
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      crossorigin=""
+    />
+    <link rel="icon" href="data:," />
+    <style>
+      :root {
+        --bg: #f4f7f5;
+        --panel: #ffffff;
+        --panel-soft: #eef3ef;
+        --text: #17211b;
+        --muted: #667268;
+        --line: #d8e1da;
+        --accent: #256d53;
+        --accent-strong: #174935;
+        --shadow: 0 16px 40px rgba(23, 33, 27, 0.14);
+        --green: #4caf50;
+        --yellow: #ffc107;
+        --orange: #ff9800;
+        --red: #f44336;
+        --purple: #9c27b0;
+        --unknown: #1e88e5;
+      }
+
+      body.dark {
+        --bg: #111816;
+        --panel: #17211e;
+        --panel-soft: #22302b;
+        --text: #edf6f0;
+        --muted: #a7b4ac;
+        --line: #314039;
+        --accent: #62c79d;
+        --accent-strong: #8ee0b9;
+        --shadow: 0 18px 44px rgba(0, 0, 0, 0.34);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+      }
+
+      body {
+        color: var(--text);
+        background: var(--bg);
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      button,
+      input,
+      select {
+        font: inherit;
+      }
+
+      .app {
+        display: grid;
+        grid-template-columns: 360px minmax(0, 1fr);
+        height: 100vh;
+        overflow: hidden;
+      }
+
+      .sidebar {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+        background: var(--panel);
+        border-right: 1px solid var(--line);
+        box-shadow: var(--shadow);
+        z-index: 800;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 20px 20px 16px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .brand h1 {
+        margin: 0;
+        font-size: 20px;
+        line-height: 1.15;
+      }
+
+      .brand small,
+      .muted {
+        color: var(--muted);
+      }
+
+      .panel-scroll {
+        overflow: auto;
+        padding: 18px 20px 22px;
+      }
+
+      .panel-block {
+        padding: 0 0 20px;
+        margin: 0 0 20px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .panel-block:last-child {
+        margin-bottom: 0;
+        padding-bottom: 0;
+        border-bottom: 0;
+      }
+
+      .block-title {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin: 0 0 12px;
+        font-size: 14px;
+      }
+
+      .dropzone,
+      .input-wrap,
+      select,
+      .stat,
+      .source-option {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--panel-soft);
+      }
+
+      .dropzone {
+        display: grid;
+        gap: 10px;
+        padding: 14px;
+        border-style: dashed;
+      }
+
+      .dropzone.dragging {
+        border-color: var(--accent);
+        background: rgba(76, 175, 80, 0.1);
+      }
+
+      .dropzone-row,
+      .input-wrap {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+      }
+
+      .dropzone-row {
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .field {
+        display: grid;
+        gap: 7px;
+        margin-bottom: 12px;
+      }
+
+      .field label,
+      .scale-row label {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .input-wrap {
+        min-height: 40px;
+        padding: 0 11px;
+      }
+
+      .input-wrap input {
+        width: 100%;
+        min-width: 0;
+        border: 0;
+        outline: 0;
+        color: var(--text);
+        background: transparent;
+      }
+
+      select {
+        width: 100%;
+        min-height: 40px;
+        color: var(--text);
+        padding: 0 11px;
+      }
+
+      input[type="range"] {
+        width: 100%;
+        accent-color: var(--accent);
+      }
+
+      .primary-button,
+      .ghost-button,
+      .icon-button,
+      .mobile-toggle {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        min-height: 38px;
+        padding: 8px 12px;
+        border: 1px solid transparent;
+        border-radius: 8px;
+        cursor: pointer;
+      }
+
+      .primary-button {
+        color: #fff;
+        background: var(--accent);
+      }
+
+      .primary-button:hover {
+        background: var(--accent-strong);
+      }
+
+      .ghost-button,
+      .icon-button,
+      .mobile-toggle {
+        color: var(--text);
+        background: var(--panel-soft);
+        border-color: var(--line);
+      }
+
+      .ghost-button:hover,
+      .icon-button:hover,
+      .mobile-toggle:hover {
+        border-color: var(--accent);
+      }
+
+      .icon-button,
+      .mobile-toggle {
+        width: 38px;
+        height: 38px;
+        padding: 0;
+      }
+
+      .status {
+        min-height: 18px;
+        margin-top: 10px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .status.error {
+        color: #d93025;
+      }
+
+      .source-grid,
+      .source-actions,
+      .source-status-grid,
+      .scale-settings,
+      .distribution {
+        display: grid;
+        gap: 8px;
+      }
+
+      .source-option {
+        display: grid;
+        grid-template-columns: 18px minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 9px;
+        min-height: 40px;
+        padding: 8px 10px;
+      }
+
+      .source-option input {
+        width: 16px;
+        height: 16px;
+        accent-color: var(--accent);
+      }
+
+      .source-option strong {
+        display: block;
+        font-size: 12px;
+        line-height: 1.2;
+      }
+
+      .source-option small {
+        display: block;
+        margin-top: 3px;
+        color: var(--muted);
+        font-size: 11px;
+        line-height: 1.25;
+      }
+
+      .source-badge {
+        padding: 3px 6px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        color: var(--muted);
+        background: var(--panel);
+        font-size: 10px;
+        white-space: nowrap;
+      }
+
+      .source-actions {
+        margin-top: 12px;
+      }
+
+      .source-status {
+        display: grid;
+        grid-template-columns: 9px minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 8px;
+        color: var(--muted);
+        font-size: 11px;
+      }
+
+      .source-status strong {
+        display: block;
+        overflow: hidden;
+        color: var(--text);
+        font-size: 12px;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .source-status span {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .source-dot {
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        background: #9aa6a0;
+      }
+
+      .source-status[data-status="loading"] .source-dot {
+        background: #1e88e5;
+      }
+
+      .source-status[data-status="loaded"] .source-dot {
+        background: var(--green);
+      }
+
+      .source-status[data-status="error"] .source-dot {
+        background: #d93025;
+      }
+
+      .range-grid,
+      .stats-grid,
+      .summary-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+      }
+
+      .stat {
+        min-height: 76px;
+        padding: 12px;
+      }
+
+      .stat-value {
+        font-size: 25px;
+        font-weight: 780;
+        line-height: 1;
+      }
+
+      .stat-label {
+        margin-top: 8px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .dist-row {
+        display: grid;
+        grid-template-columns: 76px minmax(0, 1fr) 28px;
+        align-items: center;
+        gap: 10px;
+        font-size: 12px;
+      }
+
+      .bar-track {
+        height: 8px;
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: var(--panel-soft);
+      }
+
+      .bar-fill {
+        display: block;
+        height: 100%;
+        width: 0;
+      }
+
+      .map-shell,
+      #map {
+        position: relative;
+        min-width: 0;
+        height: 100vh;
+      }
+
+      #map {
+        width: 100%;
+        background: #dbe6dd;
+      }
+
+      .top-strip {
+        position: absolute;
+        top: 18px;
+        left: 18px;
+        right: 18px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        pointer-events: none;
+        z-index: 700;
+      }
+
+      .mobile-toggle {
+        display: none;
+        pointer-events: auto;
+        background: var(--panel);
+      }
+
+      .selection,
+      .load-timer,
+      .detail-tools .ghost-button,
+      .summary-card,
+      .legend {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--panel);
+        box-shadow: var(--shadow);
+      }
+
+      .selection {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        min-height: 46px;
+        max-width: 560px;
+        padding: 10px 14px;
+        pointer-events: auto;
+      }
+
+      .selection-dot {
+        flex: 0 0 auto;
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        background: var(--accent);
+        box-shadow: 0 0 0 4px rgba(37, 109, 83, 0.16);
+      }
+
+      .selection strong {
+        display: block;
+        font-size: 14px;
+      }
+
+      .selection span {
+        display: block;
+        margin-top: 2px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .load-timer {
+        position: absolute;
+        top: 72px;
+        right: 18px;
+        z-index: 720;
+        display: grid;
+        grid-template-columns: auto minmax(90px, 1fr);
+        align-items: center;
+        gap: 9px 10px;
+        min-height: 46px;
+        width: min(360px, calc(100vw - 396px));
+        min-width: 300px;
+        padding: 9px 12px;
+        pointer-events: auto;
+      }
+
+      .load-timer i {
+        width: 18px;
+        height: 18px;
+        color: var(--accent);
+      }
+
+      .load-timer strong {
+        display: block;
+        font-size: 13px;
+      }
+
+      .load-timer span {
+        display: block;
+        margin-top: 2px;
+        color: var(--muted);
+        font-size: 11px;
+      }
+
+      .load-timer[data-state="done"] i {
+        color: var(--green);
+      }
+
+      .load-timer[data-state="error"] i {
+        color: var(--red);
+      }
+
+      .load-progress {
+        grid-column: 1 / -1;
+        height: 4px;
+        overflow: hidden;
+        border-radius: 999px;
+        background: var(--panel-soft);
+      }
+
+      .load-progress span {
+        display: block;
+        width: 0%;
+        height: 100%;
+        margin: 0;
+        border-radius: inherit;
+        background: var(--accent);
+        transition: width 0.18s ease;
+      }
+
+      .detail-tools {
+        position: absolute;
+        top: 18px;
+        right: 18px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        z-index: 710;
+      }
+
+      .detail-tools .ghost-button {
+        min-height: 42px;
+      }
+
+      .ghost-button.active {
+        color: var(--accent-strong);
+        border-color: var(--accent);
+        background: rgba(76, 175, 80, 0.12);
+      }
+
+      .summary-card {
+        position: absolute;
+        right: 18px;
+        bottom: 92px;
+        display: none;
+        width: min(360px, calc(100vw - 36px));
+        padding: 14px;
+        z-index: 705;
+      }
+
+      .summary-card.visible {
+        display: block;
+      }
+
+      .summary-title {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 12px;
+        font-size: 13px;
+        font-weight: 760;
+      }
+
+      .summary-title span {
+        color: var(--muted);
+        font-size: 11px;
+        font-weight: 520;
+      }
+
+      .summary-stat {
+        min-height: 62px;
+        padding: 10px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--panel-soft);
+      }
+
+      .summary-stat strong {
+        display: block;
+        font-size: 18px;
+        line-height: 1;
+      }
+
+      .summary-stat span {
+        display: block;
+        margin-top: 7px;
+        color: var(--muted);
+        font-size: 11px;
+      }
+
+      .legend {
+        max-width: 220px;
+        max-height: min(46vh, 420px);
+        overflow: auto;
+        padding: 12px;
+        color: var(--text);
+      }
+
+      .legend-title {
+        margin-bottom: 9px;
+        font-size: 12px;
+        font-weight: 760;
+      }
+
+      .legend-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: 7px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .legend-dot {
+        width: 11px;
+        height: 11px;
+        border-radius: 50%;
+      }
+
+      .building-label {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 32px;
+        height: 22px;
+        padding: 0 7px;
+        border: 1px solid rgba(255, 255, 255, 0.9);
+        border-radius: 7px;
+        color: #17211b;
+        background: rgba(255, 255, 255, 0.86);
+        box-shadow: 0 6px 18px rgba(23, 33, 27, 0.18);
+        font-size: 12px;
+        font-weight: 780;
+        white-space: nowrap;
+      }
+
+      .building-label.height {
+        color: #fff;
+        background: rgba(23, 33, 27, 0.82);
+      }
+
+      .building-label.unknown {
+        color: #0b3158;
+        border-color: rgba(30, 136, 229, 0.35);
+      }
+
+      .leaflet-popup-content-wrapper,
+      .leaflet-popup-tip {
+        color: var(--text);
+        background: var(--panel);
+      }
+
+      .popup-title {
+        margin-bottom: 6px;
+        font-weight: 760;
+      }
+
+      .popup-line {
+        margin: 4px 0;
+        color: var(--muted);
+      }
+
+      @media (max-width: 900px) {
+        .app {
+          grid-template-columns: 1fr;
+        }
+
+        .sidebar {
+          position: fixed;
+          inset: 0 auto 0 0;
+          width: min(360px, calc(100vw - 46px));
+          transform: translateX(-100%);
+          transition: transform 180ms ease;
+        }
+
+        body.panel-open .sidebar {
+          transform: translateX(0);
+        }
+
+        .mobile-toggle {
+          display: inline-flex;
+        }
+
+        .top-strip {
+          align-items: flex-start;
+        }
+
+        .selection {
+          max-width: calc(100vw - 94px);
+        }
+
+        .detail-tools {
+          top: auto;
+          right: 14px;
+          bottom: 18px;
+          flex-direction: column;
+          align-items: stretch;
+        }
+
+        .load-timer {
+          top: 76px;
+          left: 14px;
+          right: 14px;
+          width: auto;
+          min-width: 0;
+        }
+
+        .summary-card {
+          right: 14px;
+          bottom: 122px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <aside class="sidebar" aria-label="Панель управления">
+        <header class="brand">
+          <div>
+            <h1>Высотность зданий</h1>
+            <small>Ленинградская область</small>
+          </div>
+          <button class="icon-button" id="themeToggle" type="button" title="Тема">
+            <i data-lucide="moon"></i>
+          </button>
+        </header>
+
+        <div class="panel-scroll">
+          <section class="panel-block">
+            <h2 class="block-title"><i data-lucide="upload"></i> Данные</h2>
+            <div class="dropzone" id="dropzone">
+              <div class="dropzone-row">
+                <i data-lucide="file-spreadsheet"></i>
+                <span id="datasetName">demo-data.csv</span>
+              </div>
+              <button class="primary-button" id="uploadButton" type="button">
+                <i data-lucide="folder-open"></i>
+                Загрузить CSV
+              </button>
+              <input id="fileInput" type="file" accept=".csv,text/csv" hidden />
+            </div>
+            <div class="status" id="status">Загружено демо: 30 зданий</div>
+          </section>
+
+          <section class="panel-block">
+            <h2 class="block-title"><i data-lucide="database-zap"></i> Открытые источники</h2>
+            <div class="source-grid">
+              <label class="source-option">
+                <input type="checkbox" data-source-toggle value="osm" checked disabled />
+                <span><strong>OSM building:levels / height</strong><small>контуры, этажность, высота</small></span>
+                <span class="source-badge">база</span>
+              </label>
+              <label class="source-option">
+                <input type="checkbox" data-source-toggle value="regional" checked />
+                <span><strong>РГИС / ГИСОГД / муниципальные</strong><small>региональные слои</small></span>
+                <span class="source-badge">прямо</span>
+              </label>
+              <label class="source-option">
+                <input type="checkbox" data-source-toggle value="rgis-address" />
+                <span><strong>РГИС адреса / кадастр</strong><small>номера зданий, адреса, учетные номера</small></span>
+                <span class="source-badge">WFS</span>
+              </label>
+              <label class="source-option">
+                <input type="checkbox" data-source-toggle value="nspd" />
+                <span><strong>НСПД / ПКК</strong><small>кадастровые сведения по найденным номерам</small></span>
+                <span class="source-badge">ПКК</span>
+              </label>
+              <label class="source-option">
+                <input type="checkbox" data-source-toggle value="neighbor-typology" checked />
+                <span><strong>Типология соседних зданий</strong><small>локальный fallback</small></span>
+                <span class="source-badge">оценка</span>
+              </label>
+            </div>
+
+            <div class="source-actions">
+              <div class="field">
+                <label for="directLayerInput">Прямой GeoJSON / ArcGIS слой</label>
+                <div class="input-wrap">
+                  <i data-lucide="server"></i>
+                  <input id="directLayerInput" type="url" placeholder="https://.../FeatureServer/0 или .geojson" />
+                </div>
+              </div>
+              <button class="ghost-button" id="loadSourcesButton" type="button">
+                <i data-lucide="refresh-cw"></i>
+                Подгрузить источники
+              </button>
+            </div>
+            <div class="source-status-grid" id="sourceStatusList"></div>
+          </section>
+
+          <section class="panel-block">
+            <h2 class="block-title"><i data-lucide="sliders-horizontal"></i> Фильтры</h2>
+            <div class="field">
+              <label for="searchInput">Поиск</label>
+              <div class="input-wrap">
+                <i data-lucide="search"></i>
+                <input id="searchInput" type="search" placeholder="Название, адрес или кадастр" />
+              </div>
+            </div>
+            <div class="range-grid">
+              <div class="field">
+                <label for="minFloors">Мин. <span id="minLabel">1</span></label>
+                <input id="minFloors" type="range" min="1" max="25" value="1" />
+              </div>
+              <div class="field">
+                <label for="maxFloors">Макс. <span id="maxLabel">25</span></label>
+                <input id="maxFloors" type="range" min="1" max="25" value="25" />
+              </div>
+            </div>
+            <div class="field">
+              <label for="typeFilter">Тип здания</label>
+              <select id="typeFilter">
+                <option value="">Все типы</option>
+              </select>
+            </div>
+            <button class="ghost-button" id="resetButton" type="button">
+              <i data-lucide="rotate-ccw"></i>
+              Сбросить
+            </button>
+          </section>
+
+          <section class="panel-block">
+            <h2 class="block-title"><i data-lucide="scan-search"></i> Масштабы</h2>
+            <div class="scale-settings">
+              <div class="scale-row">
+                <label for="loadZoom">Блоки зданий с масштаба <span id="loadZoomLabel">≈ 1:50 000</span></label>
+                <input id="loadZoom" type="range" min="11" max="17" value="13" />
+              </div>
+              <div class="scale-row">
+                <label for="detailZoom">Точный режим с масштаба <span id="detailZoomLabel">≈ 1:10 000</span></label>
+                <input id="detailZoom" type="range" min="13" max="19" value="16" />
+              </div>
+              <div class="scale-row">
+                <label for="labelZoom">Подписи с масштаба <span id="labelZoomLabel">≈ 1:5 000</span></label>
+                <input id="labelZoom" type="range" min="14" max="20" value="17" />
+              </div>
+            </div>
+          </section>
+
+          <section class="panel-block">
+            <h2 class="block-title"><i data-lucide="bar-chart-3"></i> Статистика</h2>
+            <div class="stats-grid">
+              <div class="stat">
+                <div class="stat-value" id="totalStat">0</div>
+                <div class="stat-label">зданий на карте</div>
+              </div>
+              <div class="stat">
+                <div class="stat-value" id="avgStat">0</div>
+                <div class="stat-label">средняя этажность</div>
+              </div>
+            </div>
+            <div class="distribution" id="distribution"></div>
+          </section>
+        </div>
+      </aside>
+
+      <main class="map-shell">
+        <div id="map"></div>
+        <div class="top-strip">
+          <button class="mobile-toggle" id="panelToggle" type="button" title="Панель">
+            <i data-lucide="panel-left-open"></i>
+          </button>
+          <div class="selection">
+            <span class="selection-dot" id="selectionDot"></span>
+            <div>
+              <strong id="selectionTitle">Видимая зона</strong>
+              <span id="selectionMeta">Контуры загружаются из OSM / Overpass</span>
+            </div>
+          </div>
+        </div>
+        <div class="detail-tools">
+          <button class="ghost-button" id="lockScaleButton" type="button"><i data-lucide="lock"></i>Зафиксировать масштаб</button>
+          <button class="ghost-button" id="zoneButton" type="button"><i data-lucide="refresh-cw"></i>Обновить зону</button>
+          <button class="ghost-button" id="heightToggle" type="button"><i data-lucide="ruler"></i>Показ: этажи</button>
+        </div>
+        <div class="load-timer" id="loadTimerPanel" data-state="idle">
+          <i data-lucide="timer"></i>
+          <div>
+            <strong id="loadTimerValue">0.0 с</strong>
+            <span id="loadTimerMeta">ожидание загрузки</span>
+          </div>
+          <div class="load-progress"><span id="loadProgressBar"></span></div>
+        </div>
+        <div class="summary-card" id="zoneSummary">
+          <div class="summary-title">
+            <strong>Сводка по видимой зоне</strong>
+            <span id="summaryMeta">нет данных</span>
+          </div>
+          <div class="summary-grid">
+            <div class="summary-stat"><strong id="summaryMinFloors">-</strong><span>мин. этажность</span></div>
+            <div class="summary-stat"><strong id="summaryAvgFloors">-</strong><span>средняя этажность</span></div>
+            <div class="summary-stat"><strong id="summaryMaxFloors">-</strong><span>макс. этажность</span></div>
+            <div class="summary-stat"><strong id="summaryMinHeight">-</strong><span>мин. высота</span></div>
+            <div class="summary-stat"><strong id="summaryAvgHeight">-</strong><span>средняя высота</span></div>
+            <div class="summary-stat"><strong id="summaryMaxHeight">-</strong><span>макс. высота</span></div>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <script
+      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+      crossorigin=""
+    ></script>
+    <script src="https://unpkg.com/papaparse@5.4.1/papaparse.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+    <script>
+      const categories = [
+        { label: "1-3", title: "Малоэтажная", min: 1, max: 3, color: "#4CAF50" },
+        { label: "4-5", title: "Среднеэтажная", min: 4, max: 5, color: "#FFC107" },
+        { label: "6-9", title: "Повышенная", min: 6, max: 9, color: "#FF9800" },
+        { label: "10-16", title: "Многоэтажная", min: 10, max: 16, color: "#F44336" },
+        { label: "17+", title: "Высотная", min: 17, max: Infinity, color: "#9C27B0" },
+      ];
+      const exactColorStops = [
+        { floors: 1, color: "#4CAF50" },
+        { floors: 5, color: "#FFC107" },
+        { floors: 9, color: "#FF9800" },
+        { floors: 16, color: "#F44336" },
+        { floors: 25, color: "#9C27B0" },
+      ];
+      const INITIAL_CENTER = [59.9464, 30.392];
+      const DEFAULT_LOAD_ZOOM = 13;
+      const DEFAULT_DETAIL_ZOOM = 16;
+      const DEFAULT_LABEL_ZOOM = 17;
+      const MAX_OVERPASS_BBOX_AREA = 0.09;
+      const FAST_OVERPASS_LAT_SPAN = 0.006;
+      const FAST_OVERPASS_LNG_SPAN = 0.018;
+      const FULL_BOUNDS_DIRECT_AREA = 0.018;
+      const BACKGROUND_OVERPASS_LAT_SPAN = 0.008;
+      const BACKGROUND_OVERPASS_LNG_SPAN = 0.02;
+      const MAX_BACKGROUND_OSM_TILES = 96;
+      const FLOOR_HEIGHT_METERS = 3.1;
+      const UNKNOWN_DATA_COLOR = "#1E88E5";
+      const OPEN_DATA_STORAGE_KEY = "building-height-open-data";
+      const OPEN_DATA_CACHE_DB = "building-height-open-data-cache";
+      const OPEN_DATA_CACHE_STORE = "zones";
+      const OPEN_DATA_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+      const OPEN_DATA_CACHE_MAX_ENTRIES = 48;
+      const OSM_TILE_LOAD_CONCURRENCY = 4;
+      const OSM_LOAD_DEBOUNCE_MS = 140;
+      const FAST_OVERPASS_TIMEOUT_MS = 12000;
+      const CENTER_OVERPASS_TIMEOUT_MS = 8000;
+      const TILE_OVERPASS_TIMEOUT_MS = 22000;
+      const CENTER_OVERPASS_ENDPOINT_LIMIT = 3;
+      const TILE_OVERPASS_ENDPOINT_LIMIT = 5;
+      const OVERPASS_ENDPOINTS = [
+        "https://overpass.kumi.systems/api/interpreter",
+        "https://overpass.private.coffee/api/interpreter",
+        "https://overpass-api.de/api/interpreter",
+        "https://lz4.overpass-api.de/api/interpreter",
+        "https://z.overpass-api.de/api/interpreter",
+      ];
+      const OPEN_DATA_SOURCES = [
+        { id: "osm", title: "OSM", priority: 70, locked: true },
+        { id: "regional", title: "РГИС / ГИСОГД", priority: 85, direct: true },
+        { id: "rgis-address", title: "РГИС адреса / кадастр", priority: 92, direct: true },
+        { id: "nspd", title: "НСПД / ПКК", priority: 90, direct: true },
+        { id: "neighbor-typology", title: "Типология соседей", priority: 38, derived: true },
+      ];
+      const DIRECT_SOURCE_IDS = ["regional", "rgis-address", "nspd"];
+      const DEFAULT_ACTIVE_SOURCE_IDS = ["osm", "regional", "neighbor-typology"];
+      const RGIS_ADDRESS_WFS_ENDPOINT = "https://rgis.spb.ru/mapui/map_api/geoserver/wfs";
+      const RGIS_ADDRESS_TYPE_NAME = "rgis:OAS";
+      const RGIS_ADDRESS_MAX_FEATURES = 2500;
+      const NSPD_SEARCH_ENDPOINT = "https://nspd.gov.ru/api/geoportal/v2/search/geoportal";
+      const NSPD_MAX_CADASTRAL_LOOKUPS = 30;
+      const SOURCE_STATUS_LABELS = { idle: "ожидает", loading: "загрузка", loaded: "готово", error: "ошибка" };
+
+      function getStoredOpenDataConfig() {
+        try {
+          return JSON.parse(localStorage.getItem(OPEN_DATA_STORAGE_KEY) || "{}");
+        } catch {
+          return {};
+        }
+      }
+
+      const storedOpenDataConfig = getStoredOpenDataConfig();
+      const storedActiveSourceIds = Array.isArray(storedOpenDataConfig.activeSources)
+        ? storedOpenDataConfig.activeSources
+        : DEFAULT_ACTIVE_SOURCE_IDS;
+      const demoBuildings = [
+        ["ЖК Новый Мурино", 60.0489, 30.4426, 25, "г. Мурино, ул. Шоссейная", "монолитный", 2020],
+        ["ЖК Кудрово Сити", 59.9082, 30.5122, 18, "г. Кудрово, ул. Ленинградская", "панельный", 2021],
+        ["Ул. Генерала Кныша 5", 60.0101, 30.3958, 9, "г. Мурино, ул. Генерала Кныша", "кирпичный", 2018],
+        ["Микрорайон Южный", 60.0178, 30.6574, 16, "г. Всеволожск, Южный микрорайон", "монолитный", 2019],
+        ["Дом на Пушкинской", 59.572, 30.129, 3, "г. Гатчина, ул. Пушкинская", "кирпичный", 1965],
+        ["ЖК Зеленый Квартал", 59.7439, 30.0797, 12, "г. Коммунар, ул. Садовая", "панельный", 2014],
+        ["Колпинский квартал", 59.7507, 30.5886, 14, "г. Колпино, пр. Ленина", "панельный", 2008],
+        ["Тихвин Центр", 59.6442, 33.5294, 5, "г. Тихвин, ул. Карла Маркса", "кирпичный", 1982],
+        ["Выборгская набережная", 60.7105, 28.7498, 9, "г. Выборг, наб. 40-летия ВЛКСМ", "кирпичный", 1998],
+        ["Сосновоборский проспект", 59.8994, 29.0857, 10, "г. Сосновый Бор, пр. Героев", "панельный", 2006],
+        ["Кингисеппский дом", 59.3733, 28.6116, 6, "г. Кингисепп, ул. Большая Советская", "кирпичный", 1992],
+        ["Луга Северная", 58.7372, 29.8464, 5, "г. Луга, пр. Кирова", "панельный", 1988],
+        ["Волховский берег", 59.9299, 32.3382, 4, "г. Волхов, ул. Авиационная", "кирпичный", 1976],
+        ["Кириши Парк", 59.4461, 32.0205, 12, "г. Кириши, ул. Нефтехимиков", "монолитный", 2017],
+        ["Приозерск Озерный", 61.0366, 30.1195, 5, "г. Приозерск, ул. Калинина", "кирпичный", 1980],
+        ["Сертолово Восток", 60.1447, 30.2016, 17, "г. Сертолово, ул. Молодцова", "монолитный", 2022],
+        ["Янино Парк", 59.9464, 30.5734, 19, "п. Янино-1, Голландская ул.", "монолитный", 2021],
+        ["Новое Девяткино", 60.0608, 30.4814, 22, "п. Новое Девяткино, Главная ул.", "монолитный", 2020],
+        ["Бугры Север", 60.0712, 30.3934, 24, "п. Бугры, Воронцовский бульвар", "монолитный", 2023],
+        ["Тосно Центральная", 59.5407, 30.8777, 9, "г. Тосно, Советская ул.", "панельный", 2004],
+        ["Никольское", 59.7045, 30.7888, 3, "г. Никольское, Октябрьская ул.", "кирпичный", 1974],
+        ["Отрадное", 59.7726, 30.7946, 5, "г. Отрадное, Невская ул.", "панельный", 1989],
+        ["Шлиссельбург", 59.9449, 31.0348, 4, "г. Шлиссельбург, ул. Жука", "кирпичный", 1972],
+        ["Рощино", 60.2514, 29.6086, 3, "п. Рощино, Садовая ул.", "кирпичный", 1968],
+        ["Сиверский", 59.3563, 30.0783, 4, "п. Сиверский, Вокзальная ул.", "кирпичный", 1979],
+        ["Мга", 59.7503, 31.0662, 5, "п. Мга, Железнодорожная ул.", "панельный", 1985],
+        ["Сланцы", 59.1178, 28.0881, 9, "г. Сланцы, ул. Кирова", "панельный", 1996],
+        ["Пикалево", 59.5131, 34.1775, 5, "г. Пикалево, Спортивная ул.", "панельный", 1987],
+        ["Всеволожск Запад", 60.019, 30.6458, 8, "г. Всеволожск, Колтушское ш.", "кирпичный", 2001],
+        ["Гатчина Аэродром", 59.565, 30.11, 16, "г. Гатчина, ул. Авиатриссы Зверевой", "монолитный", 2016],
+      ].map((row, index) => ({
+        id: `demo-${index + 1}`,
+        name: row[0],
+        lat: row[1],
+        lng: row[2],
+        floors: row[3],
+        address: row[4],
+        buildingType: row[5],
+        yearBuilt: row[6],
+        source: "demo",
+      }));
+
+      const state = {
+        allBuildings: demoBuildings,
+        filteredBuildings: demoBuildings,
+        dataMode: "osm",
+        markers: L.layerGroup(),
+        detailPolygons: L.layerGroup(),
+        detailLabels: L.layerGroup(),
+        summaryOverlay: L.layerGroup(),
+        detailedBuildings: [],
+        loadedBounds: null,
+        zoneCache: new Map(),
+        openDataCache: new Map(),
+        openDataCacheDbPromise: null,
+        openDataCacheWriteTimer: null,
+        loadTimer: null,
+        loadClockTimer: null,
+        loadMetrics: {
+          active: false,
+          startedAt: 0,
+          finishedAt: 0,
+          token: 0,
+          phase: "ожидание",
+          tilesLoaded: 0,
+          tilesFailed: 0,
+          tilesTotal: 0,
+          buildings: 0,
+          complete: false,
+        },
+        requestToken: 0,
+        filtersTouched: false,
+        scaleLocked: false,
+        lockedGenerationZoom: null,
+        osmSourceStatus: "loading",
+        openData: {
+          activeSources: new Set(storedActiveSourceIds),
+          statuses: new Map(),
+          directLayerUrl: storedOpenDataConfig.directLayerUrl || "",
+        },
+        scale: { loadZoom: DEFAULT_LOAD_ZOOM, detailZoom: DEFAULT_DETAIL_ZOOM, labelZoom: DEFAULT_LABEL_ZOOM },
+        lightTiles: null,
+        darkTiles: null,
+        legendContainer: null,
+        showMeters: false,
+      };
+
+      const map = L.map("map", { zoomControl: false, preferCanvas: true }).setView(INITIAL_CENTER, DEFAULT_DETAIL_ZOOM);
+      L.control.zoom({ position: "bottomleft" }).addTo(map);
+      state.lightTiles = L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
+        maxZoom: 19,
+        attribution: "&copy; OpenStreetMap &copy; CARTO",
+      }).addTo(map);
+      state.darkTiles = L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+        maxZoom: 19,
+        attribution: "&copy; OpenStreetMap &copy; CARTO",
+      });
+      state.markers.addTo(map);
+      state.detailPolygons.addTo(map);
+      state.detailLabels.addTo(map);
+      state.summaryOverlay.addTo(map);
+
+      const elements = {
+        searchInput: document.getElementById("searchInput"),
+        minFloors: document.getElementById("minFloors"),
+        maxFloors: document.getElementById("maxFloors"),
+        minLabel: document.getElementById("minLabel"),
+        maxLabel: document.getElementById("maxLabel"),
+        typeFilter: document.getElementById("typeFilter"),
+        resetButton: document.getElementById("resetButton"),
+        totalStat: document.getElementById("totalStat"),
+        avgStat: document.getElementById("avgStat"),
+        distribution: document.getElementById("distribution"),
+        uploadButton: document.getElementById("uploadButton"),
+        fileInput: document.getElementById("fileInput"),
+        dropzone: document.getElementById("dropzone"),
+        status: document.getElementById("status"),
+        datasetName: document.getElementById("datasetName"),
+        sourceToggles: [...document.querySelectorAll("[data-source-toggle]")],
+        directLayerInput: document.getElementById("directLayerInput"),
+        loadSourcesButton: document.getElementById("loadSourcesButton"),
+        sourceStatusList: document.getElementById("sourceStatusList"),
+        themeToggle: document.getElementById("themeToggle"),
+        lockScaleButton: document.getElementById("lockScaleButton"),
+        heightToggle: document.getElementById("heightToggle"),
+        zoneButton: document.getElementById("zoneButton"),
+        loadZoom: document.getElementById("loadZoom"),
+        detailZoom: document.getElementById("detailZoom"),
+        labelZoom: document.getElementById("labelZoom"),
+        loadZoomLabel: document.getElementById("loadZoomLabel"),
+        detailZoomLabel: document.getElementById("detailZoomLabel"),
+        labelZoomLabel: document.getElementById("labelZoomLabel"),
+        zoneSummary: document.getElementById("zoneSummary"),
+        summaryMeta: document.getElementById("summaryMeta"),
+        summaryMinFloors: document.getElementById("summaryMinFloors"),
+        summaryAvgFloors: document.getElementById("summaryAvgFloors"),
+        summaryMaxFloors: document.getElementById("summaryMaxFloors"),
+        summaryMinHeight: document.getElementById("summaryMinHeight"),
+        summaryAvgHeight: document.getElementById("summaryAvgHeight"),
+        summaryMaxHeight: document.getElementById("summaryMaxHeight"),
+        panelToggle: document.getElementById("panelToggle"),
+        selectionTitle: document.getElementById("selectionTitle"),
+        selectionMeta: document.getElementById("selectionMeta"),
+        selectionDot: document.getElementById("selectionDot"),
+        loadTimerPanel: document.getElementById("loadTimerPanel"),
+        loadTimerValue: document.getElementById("loadTimerValue"),
+        loadTimerMeta: document.getElementById("loadTimerMeta"),
+        loadProgressBar: document.getElementById("loadProgressBar"),
+      };
+
+      function getCategory(floors) {
+        return categories.find((category) => floors >= category.min && floors <= category.max) || categories[0];
+      }
+
+      function hexToRgb(hex) {
+        const value = hex.replace("#", "");
+        return { r: parseInt(value.slice(0, 2), 16), g: parseInt(value.slice(2, 4), 16), b: parseInt(value.slice(4, 6), 16) };
+      }
+
+      function rgbToHex({ r, g, b }) {
+        return `#${[r, g, b].map((value) => Math.round(value).toString(16).padStart(2, "0")).join("")}`;
+      }
+
+      function mixColors(from, to, progress) {
+        const a = hexToRgb(from);
+        const b = hexToRgb(to);
+        return rgbToHex({ r: a.r + (b.r - a.r) * progress, g: a.g + (b.g - a.g) * progress, b: a.b + (b.b - a.b) * progress });
+      }
+
+      function getExactFloorColor(floors) {
+        if (!Number.isFinite(floors)) return UNKNOWN_DATA_COLOR;
+        const first = exactColorStops[0];
+        const last = exactColorStops[exactColorStops.length - 1];
+        if (floors <= first.floors) return first.color;
+        if (floors >= last.floors) return last.color;
+        for (let index = 0; index < exactColorStops.length - 1; index += 1) {
+          const from = exactColorStops[index];
+          const to = exactColorStops[index + 1];
+          if (floors >= from.floors && floors <= to.floors) return mixColors(from.color, to.color, (floors - from.floors) / (to.floors - from.floors));
+        }
+        return getCategory(floors).color;
+      }
+
+      function getFloorLabel(floors) {
+        if (!Number.isFinite(floors)) return "нет данных";
+        const modulo10 = floors % 10;
+        const modulo100 = floors % 100;
+        if (modulo10 === 1 && modulo100 !== 11) return `${floors} этаж`;
+        if (modulo10 >= 2 && modulo10 <= 4 && (modulo100 < 12 || modulo100 > 14)) return `${floors} этажа`;
+        return `${floors} этажей`;
+      }
+
+      function getBuildingLabel(building) {
+        if (state.showMeters) return Number.isFinite(building.heightMeters) ? `${building.heightMeters} м` : "н/д";
+        return Number.isFinite(building.floors) ? `${building.floors} эт.` : "н/д";
+      }
+
+      function getPolygonCenter(points) {
+        const sum = points.reduce((acc, point) => ({ lat: acc.lat + point[0], lng: acc.lng + point[1] }), { lat: 0, lng: 0 });
+        return [sum.lat / points.length, sum.lng / points.length];
+      }
+
+      function parseNumericTag(value) {
+        if (value === undefined || value === null || value === "") return null;
+        const matches = String(value).replace(",", ".").match(/\d+(?:\.\d+)?/g);
+        if (!matches) return null;
+        const numbers = matches.map(Number).filter(Number.isFinite);
+        return numbers.length ? Math.max(...numbers) : null;
+      }
+
+      function extractCadastralNumber(value) {
+        if (!value) return "";
+        const match = String(value).match(/\b\d{2}:\d{2}:\d{6,7}:\d+\b/);
+        return match ? match[0] : "";
+      }
+
+      function extractCadastralNumberFromTags(tags) {
+        return (
+          extractCadastralNumber(tags["ref:ru:cadastre"]) ||
+          extractCadastralNumber(tags["addr:cadastre"]) ||
+          extractCadastralNumber(tags["cadastre:number"]) ||
+          extractCadastralNumber(tags.cadastre) ||
+          extractCadastralNumber(tags.description)
+        );
+      }
+
+      function parseFloorsFromTags(tags) {
+        const fromLevels = parseNumericTag(tags["building:levels"] || tags.levels);
+        if (Number.isFinite(fromLevels) && fromLevels >= 1) return Math.round(fromLevels);
+        const fromHeight = parseNumericTag(tags.height || tags["building:height"]);
+        if (Number.isFinite(fromHeight)) return Math.max(1, Math.round(fromHeight / FLOOR_HEIGHT_METERS));
+        return null;
+      }
+
+      function parseHeightFromTags(tags, floors) {
+        const fromHeight = parseNumericTag(tags.height || tags["building:height"]);
+        if (Number.isFinite(fromHeight)) return Math.round(fromHeight);
+        if (Number.isFinite(floors)) return Math.round(floors * FLOOR_HEIGHT_METERS);
+        return null;
+      }
+
+      function buildAddress(tags) {
+        return [tags["addr:city"], tags["addr:street"], tags["addr:housenumber"]].filter(Boolean).join(", ");
+      }
+
+      function getSourceDefinition(sourceId) {
+        return OPEN_DATA_SOURCES.find((source) => source.id === sourceId);
+      }
+
+      function isSourceActive(sourceId) {
+        return state.openData.activeSources.has(sourceId);
+      }
+
+      function createSourceTrace(sourceId, message, confidence = null) {
+        const source = getSourceDefinition(sourceId);
+        return { id: sourceId, title: source?.title || sourceId, message, confidence };
+      }
+
+      function getSourceSummary(building) {
+        const sources = building.sources || [];
+        return sources.length ? sources.map((source) => source.title).join(" + ") : building.source || "источник не указан";
+      }
+
+      function getConfidenceLabel(building) {
+        if (!Number.isFinite(building.confidence)) return "достоверность н/д";
+        return `достоверность ${Math.round(building.confidence * 100)}%`;
+      }
+
+      function saveOpenDataConfig() {
+        localStorage.setItem(
+          OPEN_DATA_STORAGE_KEY,
+          JSON.stringify({
+            activeSources: [...state.openData.activeSources],
+            directLayerUrl: state.openData.directLayerUrl,
+          }),
+        );
+      }
+
+      function syncOpenDataControls({ save = true } = {}) {
+        state.openData.activeSources = new Set(elements.sourceToggles.filter((input) => input.checked || input.disabled).map((input) => input.value));
+        state.openData.directLayerUrl = elements.directLayerInput.value.trim();
+        if (save) saveOpenDataConfig();
+        renderSourceStatuses();
+      }
+
+      function setSourceStatus(sourceId, status, message = "", count = null) {
+        state.openData.statuses.set(sourceId, { status, message, count });
+        renderSourceStatuses();
+      }
+
+      function formatElapsed(ms) {
+        const seconds = Math.max(0, ms / 1000);
+        return seconds < 60 ? `${seconds.toFixed(1)} с` : `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, "0")}`;
+      }
+
+      function getLoadElapsedMs() {
+        if (!state.loadMetrics.startedAt) return 0;
+        return (state.loadMetrics.finishedAt || performance.now()) - state.loadMetrics.startedAt;
+      }
+
+      function renderLoadTimer() {
+        const metrics = state.loadMetrics;
+        elements.loadTimerValue.textContent = formatElapsed(getLoadElapsedMs());
+        const total = metrics.tilesTotal || 0;
+        const loaded = metrics.tilesLoaded || 0;
+        const failed = metrics.tilesFailed || 0;
+        const processed = loaded + failed;
+        const progress = total ? Math.min(100, Math.round((processed / total) * 100)) : metrics.complete ? 100 : 0;
+        const details = total
+          ? `${metrics.phase}: ${loaded}/${total}${failed ? `, ошибок ${failed}` : ""}; контуры ${metrics.buildings || 0}`
+          : `${metrics.phase}; контуры ${metrics.buildings || 0}`;
+        elements.loadTimerPanel.dataset.state = metrics.complete ? "done" : metrics.active ? "loading" : failed ? "error" : "idle";
+        elements.loadTimerMeta.textContent = details;
+        elements.loadProgressBar.style.width = `${progress}%`;
+      }
+
+      function startLoadTimer(token, phase = "загрузка") {
+        window.clearInterval(state.loadClockTimer);
+        state.loadMetrics = {
+          active: true,
+          startedAt: performance.now(),
+          finishedAt: 0,
+          token,
+          phase,
+          tilesLoaded: 0,
+          tilesFailed: 0,
+          tilesTotal: 0,
+          buildings: 0,
+          complete: false,
+        };
+        renderLoadTimer();
+        state.loadClockTimer = window.setInterval(renderLoadTimer, 100);
+      }
+
+      function updateLoadTimer(token, patch = {}) {
+        if (state.loadMetrics.token !== token) return;
+        state.loadMetrics = { ...state.loadMetrics, ...patch };
+        renderLoadTimer();
+      }
+
+      function finishLoadTimer(token, { complete = true, phase = complete ? "полная загрузка" : "частично", buildings = state.detailedBuildings.length } = {}) {
+        if (state.loadMetrics.token !== token) return;
+        state.loadMetrics = {
+          ...state.loadMetrics,
+          active: false,
+          finishedAt: performance.now(),
+          complete,
+          phase,
+          buildings,
+        };
+        window.clearInterval(state.loadClockTimer);
+        renderLoadTimer();
+      }
+
+      function cancelActiveLoad(phase = "отменено") {
+        const token = state.requestToken;
+        window.clearTimeout(state.loadTimer);
+        if (state.loadMetrics.active && state.loadMetrics.token === token) {
+          finishLoadTimer(token, { complete: false, phase, buildings: state.detailedBuildings.length });
+        }
+        state.requestToken += 1;
+      }
+
+      function getSourceStatus(sourceId) {
+        return state.openData.statuses.get(sourceId) || { status: "idle", message: "", count: null };
+      }
+
+      function renderSourceStatuses() {
+        elements.sourceStatusList.innerHTML = OPEN_DATA_SOURCES.map((source) => {
+          const status = getSourceStatus(source.id);
+          const countText = Number.isFinite(status.count) ? status.count : "";
+          return `
+            <div class="source-status" data-status="${status.status}">
+              <span class="source-dot"></span>
+              <span><strong>${escapeHtml(source.title)}</strong><span>${escapeHtml(status.message || SOURCE_STATUS_LABELS[status.status] || status.status)}</span></span>
+              <span>${escapeHtml(countText)}</span>
+            </div>
+          `;
+        }).join("");
+      }
+
+      function initializeOpenDataControls() {
+        elements.sourceToggles.forEach((input) => {
+          input.checked = input.disabled || state.openData.activeSources.has(input.value);
+        });
+        elements.directLayerInput.value = state.openData.directLayerUrl;
+        OPEN_DATA_SOURCES.forEach((source) => setSourceStatus(source.id, "idle", "ожидает"));
+      }
+
+      function getBboxArea(bounds) {
+        return Math.abs((bounds.getNorth() - bounds.getSouth()) * (bounds.getEast() - bounds.getWest()));
+      }
+
+      function getCurrentQueryBounds() {
+        return map.getBounds();
+      }
+
+      function boundsContain(inner, outer) {
+        return outer && outer.getSouth() <= inner.getSouth() && outer.getWest() <= inner.getWest() && outer.getNorth() >= inner.getNorth() && outer.getEast() >= inner.getEast();
+      }
+
+      function areQueryBoundsRelevant(bounds) {
+        return !bounds || map.getBounds().pad(0.2).intersects(bounds);
+      }
+
+      function hashString(value) {
+        let hash = 2166136261;
+        for (let index = 0; index < value.length; index += 1) {
+          hash ^= value.charCodeAt(index);
+          hash = Math.imul(hash, 16777619);
+        }
+        return (hash >>> 0).toString(36);
+      }
+
+      function getOpenDataCacheSignature() {
+        return hashString(
+          JSON.stringify({
+            sources: [...state.openData.activeSources].sort(),
+            directLayerUrl: state.openData.directLayerUrl,
+            loadZoom: state.scale.loadZoom,
+          }),
+        );
+      }
+
+      function getBoundsKey(bounds) {
+        const zoomBucket = Math.max(state.scale.loadZoom, Math.min(18, map.getZoom()));
+        const precision = zoomBucket >= 18 ? 4 : 3;
+        const boundsKey = [bounds.getSouth().toFixed(precision), bounds.getWest().toFixed(precision), bounds.getNorth().toFixed(precision), bounds.getEast().toFixed(precision)].join(",");
+        return `${getOpenDataCacheSignature()}|${boundsKey}`;
+      }
+
+      function getBoundsArray(bounds) {
+        return [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()];
+      }
+
+      function serializeBounds(bounds) {
+        return bounds ? [bounds.getSouth(), bounds.getWest(), bounds.getNorth(), bounds.getEast()] : null;
+      }
+
+      function deserializeBounds(value) {
+        return Array.isArray(value) && value.length === 4 ? L.latLngBounds([value[0], value[1]], [value[2], value[3]]) : null;
+      }
+
+      function cloneBuildingsForCache(buildings) {
+        return buildings.map((building) => {
+          const { raw, ...cachedBuilding } = building;
+          return {
+            ...cachedBuilding,
+            footprint: (building.footprint || []).map((point) => [point[0], point[1]]),
+            sources: (building.sources || []).map((source) => ({ ...source })),
+          };
+        });
+      }
+
+      function normalizeCachedZone(entry) {
+        if (!entry || !Array.isArray(entry.buildings) || !entry.buildings.length) return null;
+        const bounds = deserializeBounds(entry.bounds);
+        if (!bounds) return null;
+        return {
+          ...entry,
+          bounds,
+          buildings: cloneBuildingsForCache(entry.buildings),
+          updatedAt: Number(entry.updatedAt) || 0,
+        };
+      }
+
+      function isCachedZoneFresh(entry) {
+        return Boolean(entry?.complete && entry.updatedAt) && Date.now() - entry.updatedAt < OPEN_DATA_CACHE_TTL_MS;
+      }
+
+      function openOpenDataCacheDb() {
+        if (!("indexedDB" in window)) return Promise.resolve(null);
+        if (state.openDataCacheDbPromise) return state.openDataCacheDbPromise;
+        state.openDataCacheDbPromise = new Promise((resolve) => {
+          const request = indexedDB.open(OPEN_DATA_CACHE_DB, 1);
+          request.onupgradeneeded = () => {
+            const db = request.result;
+            if (!db.objectStoreNames.contains(OPEN_DATA_CACHE_STORE)) {
+              const store = db.createObjectStore(OPEN_DATA_CACHE_STORE, { keyPath: "key" });
+              store.createIndex("updatedAt", "updatedAt");
+            }
+          };
+          request.onsuccess = () => resolve(request.result);
+          request.onerror = () => resolve(null);
+          request.onblocked = () => resolve(null);
+        });
+        return state.openDataCacheDbPromise;
+      }
+
+      function readCacheRequest(store, key) {
+        return new Promise((resolve) => {
+          const request = store.get(key);
+          request.onsuccess = () => resolve(request.result || null);
+          request.onerror = () => resolve(null);
+        });
+      }
+
+      function readAllCacheRequest(store) {
+        return new Promise((resolve) => {
+          const request = store.getAll();
+          request.onsuccess = () => resolve(request.result || []);
+          request.onerror = () => resolve([]);
+        });
+      }
+
+      async function readOpenDataCacheEntry(cacheKey, bounds) {
+        const db = await openOpenDataCacheDb();
+        if (!db) return null;
+        const exact = normalizeCachedZone(await readCacheRequest(db.transaction(OPEN_DATA_CACHE_STORE, "readonly").objectStore(OPEN_DATA_CACHE_STORE), cacheKey));
+        if (exact && boundsContain(bounds, exact.bounds)) return exact;
+
+        const signature = `${getOpenDataCacheSignature()}|`;
+        const candidates = (await readAllCacheRequest(db.transaction(OPEN_DATA_CACHE_STORE, "readonly").objectStore(OPEN_DATA_CACHE_STORE)))
+          .map(normalizeCachedZone)
+          .filter((entry) => entry && entry.key.startsWith(signature) && boundsContain(bounds, entry.bounds))
+          .sort((a, b) => {
+            if (isCachedZoneFresh(a) !== isCachedZoneFresh(b)) return isCachedZoneFresh(a) ? -1 : 1;
+            if (a.complete !== b.complete) return a.complete ? -1 : 1;
+            return getBboxArea(a.bounds) - getBboxArea(b.bounds) || b.updatedAt - a.updatedAt;
+          });
+        return candidates[0] || null;
+      }
+
+      function pruneOpenDataCache(db) {
+        const transaction = db.transaction(OPEN_DATA_CACHE_STORE, "readwrite");
+        const store = transaction.objectStore(OPEN_DATA_CACHE_STORE);
+        const request = store.getAll();
+        request.onsuccess = () => {
+          const entries = (request.result || []).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+          entries.slice(OPEN_DATA_CACHE_MAX_ENTRIES).forEach((entry) => store.delete(entry.key));
+        };
+      }
+
+      async function writeOpenDataCacheEntry(cacheKey, buildings, bounds, { complete = true } = {}) {
+        if (!cacheKey || !buildings.length) return;
+        const db = await openOpenDataCacheDb();
+        if (!db) return;
+        const entry = {
+          key: cacheKey,
+          bounds: serializeBounds(bounds),
+          buildings: cloneBuildingsForCache(buildings),
+          complete,
+          updatedAt: Date.now(),
+        };
+        const transaction = db.transaction(OPEN_DATA_CACHE_STORE, "readwrite");
+        transaction.objectStore(OPEN_DATA_CACHE_STORE).put(entry);
+        transaction.oncomplete = () => pruneOpenDataCache(db);
+      }
+
+      function scheduleOpenDataCacheWrite(cacheKey, buildings, bounds, options) {
+        if (!cacheKey || !buildings.length) return;
+        window.clearTimeout(state.openDataCacheWriteTimer);
+        state.openDataCacheWriteTimer = window.setTimeout(() => {
+          writeOpenDataCacheEntry(cacheKey, buildings, bounds, options).catch(() => {});
+        }, 250);
+      }
+
+      function limitBoundsToCenter(bounds, maxLatSpan, maxLngSpan) {
+        const center = bounds.getCenter();
+        const halfLat = Math.min((bounds.getNorth() - bounds.getSouth()) / 2, maxLatSpan / 2);
+        const halfLng = Math.min((bounds.getEast() - bounds.getWest()) / 2, maxLngSpan / 2);
+        return L.latLngBounds(
+          [Math.max(bounds.getSouth(), center.lat - halfLat), Math.max(bounds.getWest(), center.lng - halfLng)],
+          [Math.min(bounds.getNorth(), center.lat + halfLat), Math.min(bounds.getEast(), center.lng + halfLng)],
+        );
+      }
+
+      function getFastOsmBounds(bounds) {
+        return limitBoundsToCenter(bounds, FAST_OVERPASS_LAT_SPAN, FAST_OVERPASS_LNG_SPAN);
+      }
+
+      function shouldLoadFullBoundsDirect(bounds, zoom = map.getZoom()) {
+        return getBboxArea(bounds) <= FULL_BOUNDS_DIRECT_AREA;
+      }
+
+      function splitBoundsIntoTiles(bounds, maxLatSpan = BACKGROUND_OVERPASS_LAT_SPAN, maxLngSpan = BACKGROUND_OVERPASS_LNG_SPAN) {
+        const latSteps = Math.max(1, Math.ceil((bounds.getNorth() - bounds.getSouth()) / maxLatSpan));
+        const lngSteps = Math.max(1, Math.ceil((bounds.getEast() - bounds.getWest()) / maxLngSpan));
+        const latStep = (bounds.getNorth() - bounds.getSouth()) / latSteps;
+        const lngStep = (bounds.getEast() - bounds.getWest()) / lngSteps;
+        const center = bounds.getCenter();
+        const tiles = [];
+        for (let latIndex = 0; latIndex < latSteps; latIndex += 1) {
+          for (let lngIndex = 0; lngIndex < lngSteps; lngIndex += 1) {
+            const south = bounds.getSouth() + latStep * latIndex;
+            const west = bounds.getWest() + lngStep * lngIndex;
+            const tileBounds = L.latLngBounds([south, west], [south + latStep, west + lngStep]);
+            tiles.push({ bounds: tileBounds, distance: distanceMeters(center, tileBounds.getCenter()) });
+          }
+        }
+        return tiles.sort((a, b) => a.distance - b.distance).slice(0, MAX_BACKGROUND_OSM_TILES).map((tile) => tile.bounds);
+      }
+
+      function buildOverpassQuery(bounds) {
+        const bbox = `${bounds.getSouth()},${bounds.getWest()},${bounds.getNorth()},${bounds.getEast()}`;
+        return `
+          [out:json][timeout:12];
+          (
+            way["building"](${bbox});
+            relation["building"](${bbox});
+          );
+          out geom qt;
+        `;
+      }
+
+      function getOverpassSearchRadius(bounds) {
+        return Math.min(2800, Math.max(250, Math.round(distanceMeters({ lat: bounds.getSouth(), lng: bounds.getWest() }, { lat: bounds.getNorth(), lng: bounds.getEast() }) / 2)));
+      }
+
+      function buildOverpassAroundQuery(bounds) {
+        const center = bounds.getCenter();
+        const radius = getOverpassSearchRadius(bounds);
+        return `
+          [out:json][timeout:12];
+          (
+            way["building"](around:${radius},${center.lat},${center.lng});
+            relation["building"](around:${radius},${center.lat},${center.lng});
+          );
+          out geom qt;
+        `;
+      }
+
+      function buildOverpassPartsQuery(bounds) {
+        const bbox = `${bounds.getSouth()},${bounds.getWest()},${bounds.getNorth()},${bounds.getEast()}`;
+        return `
+          [out:json][timeout:12];
+          (
+            way["building:part"](${bbox});
+            relation["building:part"](${bbox});
+          );
+          out geom qt;
+        `;
+      }
+
+      function buildOverpassCenterQuery(bounds) {
+        const bbox = `${bounds.getSouth()},${bounds.getWest()},${bounds.getNorth()},${bounds.getEast()}`;
+        return `
+          [out:json][timeout:8];
+          (
+            way["building"](${bbox});
+            relation["building"](${bbox});
+          );
+          out center qt;
+        `;
+      }
+
+      function buildOverpassQueries(bounds) {
+        return [buildOverpassQuery(bounds), buildOverpassAroundQuery(bounds)];
+      }
+
+      function getEndpointHost(endpoint) {
+        try {
+          return new URL(endpoint).hostname.replace(/^www\./, "");
+        } catch {
+          return endpoint;
+        }
+      }
+
+      function createOverpassRequestVariants(endpoint, query) {
+        const encodedQuery = encodeURIComponent(query);
+        const headers = { Accept: "application/json" };
+        return [
+          {
+            label: "POST",
+            url: endpoint,
+            options: {
+              method: "POST",
+              headers: { ...headers, "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
+              body: `data=${encodedQuery}`,
+            },
+          },
+          {
+            label: "GET",
+            url: `${endpoint}?data=${encodedQuery}`,
+            options: { method: "GET", headers },
+          },
+        ];
+      }
+
+      async function fetchOsmFromEndpoint(endpoint, query, bounds, timeoutMs = 26000) {
+        const errors = [];
+        for (const variant of createOverpassRequestVariants(endpoint, query)) {
+          try {
+            const payload = await fetchJsonDirect(variant.url, variant.options, timeoutMs);
+            return {
+              endpoint,
+              transport: variant.label,
+              rawCount: payload.elements?.length || 0,
+              footprints: parseOsmFootprints(payload, bounds),
+            };
+          } catch (error) {
+            errors.push(`${getEndpointHost(endpoint)} ${variant.label}: ${getReadableFetchError(error)}`);
+          }
+        }
+        throw new Error(errors.join(" / "));
+      }
+
+      function getOverpassEndpoints(limit = OVERPASS_ENDPOINTS.length) {
+        const count = Math.max(1, Math.min(limit, OVERPASS_ENDPOINTS.length));
+        const offset = state.requestToken % OVERPASS_ENDPOINTS.length;
+        return Array.from({ length: count }, (_, index) => OVERPASS_ENDPOINTS[(offset + index) % OVERPASS_ENDPOINTS.length]);
+      }
+
+      async function fetchOsmFootprintsDirect(queries, bounds, { allowEmpty = false, timeoutMs = 26000, endpointLimit = OVERPASS_ENDPOINTS.length } = {}) {
+        const errors = [];
+        for (const query of queries) {
+          const tasks = getOverpassEndpoints(endpointLimit).map((endpoint) => fetchOsmFromEndpoint(endpoint, query, bounds, timeoutMs));
+          if (allowEmpty) {
+            try {
+              return await Promise.any(
+                tasks.map((task) =>
+                  task.then((result) => {
+                    if (result.footprints.length) return result;
+                    throw new Error(`${getEndpointHost(result.endpoint)}: 0 контуров из ${result.rawCount || 0} элементов`);
+                  }),
+                ),
+              );
+            } catch {}
+            const settled = await Promise.allSettled(tasks);
+            const fulfilled = settled.filter((item) => item.status === "fulfilled").map((item) => item.value);
+            const rejectedErrors = settled.filter((item) => item.status === "rejected").map((item) => item.reason?.message).filter(Boolean);
+            const nonEmpty = fulfilled.find((result) => result.footprints.length);
+            if (nonEmpty) return { ...nonEmpty, errors: rejectedErrors };
+            if (fulfilled.length) return { ...fulfilled[0], errors: rejectedErrors };
+            errors.push(...rejectedErrors);
+            continue;
+          }
+          try {
+            return await Promise.any(
+              tasks.map((task) =>
+                task.then((result) => {
+                  if (!result.footprints.length) throw new Error(`${new URL(result.endpoint).hostname}: 0 контуров из ${result.rawCount || 0} элементов`);
+                  return result;
+                }),
+              ),
+            );
+          } catch (error) {
+            errors.push(...(error.errors || [error]).map((item) => item.message).filter(Boolean));
+          }
+        }
+        if (allowEmpty && !errors.length) return { endpoint: OVERPASS_ENDPOINTS[0], rawCount: 0, footprints: [] };
+        throw new Error(errors.slice(0, 2).join("; ") || "Overpass не вернул контуры");
+      }
+
+      function pointKey(point) {
+        return `${point[0].toFixed(7)},${point[1].toFixed(7)}`;
+      }
+
+      function isClosedRing(points) {
+        return points.length >= 4 && pointKey(points[0]) === pointKey(points[points.length - 1]);
+      }
+
+      function assembleRelationRings(members) {
+        const segments = (members || [])
+          .filter((member) => member.role === "outer" && member.geometry && member.geometry.length >= 2)
+          .map((member) => member.geometry.map((point) => [point.lat, point.lon]));
+        const rings = [];
+        while (segments.length) {
+          const ring = segments.shift();
+          let changed = true;
+          while (!isClosedRing(ring) && changed) {
+            changed = false;
+            const start = pointKey(ring[0]);
+            const end = pointKey(ring[ring.length - 1]);
+            for (let index = 0; index < segments.length; index += 1) {
+              const segment = segments[index];
+              const segmentStart = pointKey(segment[0]);
+              const segmentEnd = pointKey(segment[segment.length - 1]);
+              if (end === segmentStart) ring.push(...segment.slice(1));
+              else if (end === segmentEnd) ring.push(...[...segment].reverse().slice(1));
+              else if (start === segmentEnd) ring.unshift(...segment.slice(0, -1));
+              else if (start === segmentStart) ring.unshift(...[...segment].reverse().slice(0, -1));
+              else continue;
+              segments.splice(index, 1);
+              changed = true;
+              break;
+            }
+          }
+          if (isClosedRing(ring)) rings.push(ring);
+        }
+        return rings;
+      }
+
+      function toOsmBuilding(element, footprint, partIndex = 0, { approximate = false } = {}) {
+        const tags = element.tags || {};
+        const floors = parseFloorsFromTags(tags);
+        const heightMeters = parseHeightFromTags(tags, floors);
+        const center = getPolygonCenter(footprint);
+        const address = buildAddress(tags);
+        const hasDirectFloors = Number.isFinite(parseNumericTag(tags["building:levels"] || tags.levels));
+        const hasDirectHeight = Number.isFinite(parseNumericTag(tags.height || tags["building:height"]));
+        const confidence = hasDirectFloors || hasDirectHeight ? 0.82 : 0.45;
+        const sourceMessage = [hasDirectFloors ? "building:levels" : "", hasDirectHeight ? "height" : ""].filter(Boolean).join(" / ") || "контур без высотности";
+        const osmPriority = getSourceDefinition("osm").priority;
+        return {
+          id: `osm-${element.type}-${element.id}-${partIndex}`,
+          osmId: `${element.type}/${element.id}`,
+          name: tags.name || address || `OSM ${element.type}/${element.id}`,
+          address,
+          lat: center[0],
+          lng: center[1],
+          footprint,
+          isApproxFootprint: approximate,
+          floors,
+          buildingType: tags.building || tags["building:part"] || "building",
+          yearBuilt: parseNumericTag(tags.start_date || tags["building:year"]),
+          heightMeters,
+          cadastralNumber: extractCadastralNumberFromTags(tags),
+          source: "OpenStreetMap",
+          sources: [createSourceTrace("osm", sourceMessage, confidence)],
+          confidence,
+          floorSource: Number.isFinite(floors) ? "OSM" : "",
+          heightSource: Number.isFinite(heightMeters) ? "OSM" : "",
+          floorPriority: Number.isFinite(floors) ? osmPriority : 0,
+          heightPriority: Number.isFinite(heightMeters) ? osmPriority : 0,
+        };
+      }
+
+      function parseOsmFootprints(osmJson, bounds) {
+        return (osmJson.elements || [])
+          .flatMap((element) => {
+            if (element.type === "way" && element.geometry && element.geometry.length >= 4) {
+              return [toOsmBuilding(element, element.geometry.map((point) => [point.lat, point.lon]))];
+            }
+            if ((element.type === "way" || element.type === "relation") && element.center) {
+              return [toOsmBuilding(element, createPointFootprint(element.center.lat, element.center.lon, 7), 0, { approximate: true })];
+            }
+            if (element.type === "relation" && element.members) {
+              return assembleRelationRings(element.members).map((footprint, index) => toOsmBuilding(element, footprint, index));
+            }
+            return [];
+          })
+          .filter((building) => bounds.intersects(L.latLngBounds(building.footprint)));
+      }
+
+      function getSlimBuilding(building) {
+        return {
+          id: building.id,
+          osmId: building.osmId,
+          cadastralNumber: building.cadastralNumber,
+          name: building.name,
+          address: building.address,
+          lat: building.lat,
+          lng: building.lng,
+          floors: building.floors,
+          heightMeters: building.heightMeters,
+          buildingType: building.buildingType,
+          yearBuilt: building.yearBuilt,
+          registryNumber: building.registryNumber,
+          purpose: building.purpose,
+          areaSqm: building.areaSqm,
+          fiasAddressGuid: building.fiasAddressGuid,
+          fiasBuildingGuid: building.fiasBuildingGuid,
+        };
+      }
+
+      function parseWktPoint(value) {
+        if (!value) return null;
+        const match = String(value).match(/POINT\s*\(\s*(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s*\)/i);
+        return match ? [Number(match[2]), Number(match[1])] : null;
+      }
+
+      function normalizeGeoJsonFootprint(geometry) {
+        if (!geometry || !geometry.coordinates) return null;
+        const coordinates = geometry.type === "Polygon" ? geometry.coordinates[0] : geometry.type === "MultiPolygon" ? geometry.coordinates[0]?.[0] : null;
+        if (!coordinates || coordinates.length < 4) return null;
+        const footprint = coordinates.map((point) => [Number(point[1]), Number(point[0])]).filter((point) => Number.isFinite(point[0]) && Number.isFinite(point[1]));
+        return footprint.length >= 4 ? footprint : null;
+      }
+
+      function getPointFromExternalRecord(record, footprint) {
+        const point = record.point || record.centroid || record.center || {};
+        const wktPoint = parseWktPoint(record.geometry?.centroid || record.centroid);
+        if (wktPoint) return wktPoint;
+        if (record.geometry?.type === "Point" && Array.isArray(record.geometry.coordinates)) {
+          return [Number(record.geometry.coordinates[1]), Number(record.geometry.coordinates[0])];
+        }
+        const geometryLat = Number(record.geometry?.y ?? record.geometry?.lat ?? record.geometry?.latitude);
+        const geometryLng = Number(record.geometry?.x ?? record.geometry?.lng ?? record.geometry?.lon ?? record.geometry?.longitude);
+        if (Number.isFinite(geometryLat) && Number.isFinite(geometryLng)) return [geometryLat, geometryLng];
+        const lat = Number(record.lat ?? record.latitude ?? point.lat ?? point.latitude);
+        const lng = Number(record.lng ?? record.lon ?? record.longitude ?? point.lng ?? point.lon ?? point.longitude);
+        if (Number.isFinite(lat) && Number.isFinite(lng)) return [lat, lng];
+        return footprint?.length ? getPolygonCenter(footprint) : null;
+      }
+
+      function parseFloorsFromExternalRecord(record) {
+        const floorsObject = record.floors || {};
+        const candidates = [
+          record.floors,
+          record.floor_count,
+          record.floors_count,
+          record.storeys,
+          record.levels,
+          record["building:levels"],
+          record.ground_floors,
+          record.FLOORS,
+          record.FLOOR_COUNT,
+          record.LEVELS,
+          record.ETAZH,
+          record.ETAJ,
+          record["Этажность"],
+          record["Количество этажей"],
+          record["Кол-во этажей"],
+          floorsObject.ground_count,
+          floorsObject.ground_min_count,
+          record.object_max_floor,
+          record.max_floor,
+        ];
+        const value = candidates.map(parseNumericTag).find((item) => Number.isFinite(item) && item >= 1);
+        return Number.isFinite(value) ? Math.round(value) : null;
+      }
+
+      function parseHeightFromExternalRecord(record, floors) {
+        const value = [
+          record.heightMeters,
+          record.height_meters,
+          record.height,
+          record["building:height"],
+          record.absolute_height,
+          record.HEIGHT,
+          record.H_M,
+          record["Высота"],
+        ].map(parseNumericTag).find((item) => Number.isFinite(item) && item > 0);
+        if (Number.isFinite(value)) return Math.round(value);
+        if (Number.isFinite(floors)) return Math.round(floors * FLOOR_HEIGHT_METERS);
+        return null;
+      }
+
+      function normalizeSourcePayload(payload, sourceId) {
+        const rawItems = Array.isArray(payload) ? payload : payload?.type === "FeatureCollection" ? payload.features : payload?.buildings || payload?.items || payload?.result?.items || [];
+        return rawItems
+          .map((item) => {
+            const properties = item.properties || item;
+            const geometry = item.type === "Feature" ? item.geometry : item.geometry || properties.geometry;
+            const footprint = normalizeGeoJsonFootprint(geometry) || properties.footprint || null;
+            const point = getPointFromExternalRecord({ ...properties, geometry }, footprint);
+            const floors = parseFloorsFromExternalRecord(properties);
+            const heightMeters = parseHeightFromExternalRecord(properties, floors);
+            const cadastralNumber =
+              extractCadastralNumber(properties.cadastralNumber) ||
+              extractCadastralNumber(properties.cadastral_number) ||
+              extractCadastralNumber(properties.cadnum) ||
+              extractCadastralNumber(properties.address);
+            if (!point && !footprint?.length && !cadastralNumber) return null;
+            return {
+              id: String(properties.id || properties.object_id || properties.global_id || ""),
+              sourceId,
+              osmId: properties.osmId || properties.osm_id || "",
+              name: properties.name || properties.full_name || properties.building_name || "",
+              address: properties.address || properties.full_address_name || properties.address_name || "",
+              lat: point?.[0],
+              lng: point?.[1],
+              footprint,
+              floors,
+              heightMeters,
+              buildingType: properties.buildingType || properties.building_type || properties.type || "",
+              yearBuilt: parseNumericTag(properties.yearBuilt || properties.year_built || properties.build_year),
+              cadastralNumber,
+              confidence: Math.max(0.1, Math.min(1, Number(properties.confidence) || 0.78)),
+              raw: properties,
+            };
+          })
+          .filter(Boolean);
+      }
+
+      function createPointFootprint(lat, lng, halfSizeMeters = 9) {
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+        const metersPerDegreeLat = 111320;
+        const metersPerDegreeLng = Math.max(1, 111320 * Math.cos((lat * Math.PI) / 180));
+        const dLat = halfSizeMeters / metersPerDegreeLat;
+        const dLng = halfSizeMeters / metersPerDegreeLng;
+        return [
+          [lat - dLat, lng - dLng],
+          [lat - dLat, lng + dLng],
+          [lat + dLat, lng + dLng],
+          [lat + dLat, lng - dLng],
+          [lat - dLat, lng - dLng],
+        ];
+      }
+
+      function createExternalBuilding(record, source) {
+        const sourceId = source.id;
+        const footprint = record.footprint?.length ? record.footprint : createPointFootprint(record.lat, record.lng);
+        if (!footprint?.length) return null;
+        const center = getPolygonCenter(footprint);
+        const floors = Number.isFinite(record.floors) ? record.floors : null;
+        const heightMeters = Number.isFinite(record.heightMeters) ? record.heightMeters : Number.isFinite(floors) ? Math.round(floors * FLOOR_HEIGHT_METERS) : null;
+        const confidence = record.confidence || 0.72;
+        return {
+          id: `${sourceId}-${record.id || record.cadastralNumber || `${center[0].toFixed(6)}-${center[1].toFixed(6)}`}`,
+          osmId: record.osmId || "",
+          name: record.name || record.address || `${source.title} объект`,
+          address: record.address || "",
+          lat: center[0],
+          lng: center[1],
+          footprint,
+          floors,
+          buildingType: record.buildingType || source.title,
+          yearBuilt: record.yearBuilt,
+          heightMeters,
+          cadastralNumber: record.cadastralNumber || "",
+          registryNumber: record.registryNumber || "",
+          purpose: record.purpose || "",
+          areaSqm: Number.isFinite(record.areaSqm) ? record.areaSqm : null,
+          fiasAddressGuid: record.fiasAddressGuid || "",
+          fiasBuildingGuid: record.fiasBuildingGuid || "",
+          source: source.title,
+          sources: [createSourceTrace(sourceId, "прямой источник", confidence)],
+          confidence,
+          floorSource: Number.isFinite(floors) ? source.title : "",
+          heightSource: Number.isFinite(heightMeters) ? source.title : "",
+          floorPriority: Number.isFinite(floors) ? source.priority : 0,
+          heightPriority: Number.isFinite(heightMeters) ? source.priority : 0,
+        };
+      }
+
+      function distanceMeters(a, b) {
+        const radius = 6371000;
+        const lat1 = (a.lat * Math.PI) / 180;
+        const lat2 = (b.lat * Math.PI) / 180;
+        const dLat = ((b.lat - a.lat) * Math.PI) / 180;
+        const dLng = ((b.lng - a.lng) * Math.PI) / 180;
+        const hav = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+        return radius * 2 * Math.atan2(Math.sqrt(hav), Math.sqrt(1 - hav));
+      }
+
+      function findMatchingBuilding(buildings, record) {
+        if (record.cadastralNumber) {
+          const cadastralMatch = buildings.find((building) => building.cadastralNumber === record.cadastralNumber);
+          if (cadastralMatch) return cadastralMatch;
+        }
+        if (record.osmId) {
+          const osmMatch = buildings.find((building) => building.osmId === record.osmId);
+          if (osmMatch) return osmMatch;
+        }
+        if (!Number.isFinite(record.lat) || !Number.isFinite(record.lng)) return null;
+        const nearest = buildings
+          .map((building) => ({ building, distance: distanceMeters({ lat: building.lat, lng: building.lng }, { lat: record.lat, lng: record.lng }) }))
+          .sort((a, b) => a.distance - b.distance)[0];
+        return nearest && nearest.distance <= 85 ? nearest.building : null;
+      }
+
+      function appendSourceTrace(building, sourceId, message, confidence) {
+        const source = createSourceTrace(sourceId, message, confidence);
+        building.sources = building.sources || [];
+        const existing = building.sources.find((item) => item.id === source.id);
+        if (existing) {
+          existing.message = message;
+          existing.confidence = Math.max(existing.confidence || 0, confidence || 0);
+        } else {
+          building.sources.push(source);
+        }
+      }
+
+      function applySourceRecord(building, record, source) {
+        let changed = false;
+        const priority = source.priority || 0;
+        const confidence = record.confidence || 0.7;
+        if (record.cadastralNumber && !building.cadastralNumber) {
+          building.cadastralNumber = record.cadastralNumber;
+          changed = true;
+        }
+        if (record.address && !building.address) {
+          building.address = record.address;
+          changed = true;
+        }
+        if (record.name && (!building.name || building.name.startsWith("OSM "))) {
+          building.name = record.name;
+          changed = true;
+        }
+        if (record.buildingType && (!building.buildingType || building.buildingType === "building")) {
+          building.buildingType = record.buildingType;
+          changed = true;
+        }
+        if (record.registryNumber && !building.registryNumber) {
+          building.registryNumber = record.registryNumber;
+          changed = true;
+        }
+        if (record.purpose && !building.purpose) {
+          building.purpose = record.purpose;
+          changed = true;
+        }
+        if (Number.isFinite(record.areaSqm) && !Number.isFinite(building.areaSqm)) {
+          building.areaSqm = record.areaSqm;
+          changed = true;
+        }
+        if (record.fiasAddressGuid && !building.fiasAddressGuid) {
+          building.fiasAddressGuid = record.fiasAddressGuid;
+          changed = true;
+        }
+        if (record.fiasBuildingGuid && !building.fiasBuildingGuid) {
+          building.fiasBuildingGuid = record.fiasBuildingGuid;
+          changed = true;
+        }
+        if (Number.isFinite(record.yearBuilt) && !Number.isFinite(building.yearBuilt)) {
+          building.yearBuilt = record.yearBuilt;
+          changed = true;
+        }
+        if (Number.isFinite(record.floors) && (!Number.isFinite(building.floors) || priority >= (building.floorPriority || 0))) {
+          building.floors = record.floors;
+          building.floorSource = source.title;
+          building.floorPriority = priority;
+          building.confidence = Math.max(building.confidence || 0, confidence);
+          changed = true;
+        }
+        if (Number.isFinite(record.heightMeters) && (!Number.isFinite(building.heightMeters) || priority >= (building.heightPriority || 0))) {
+          building.heightMeters = record.heightMeters;
+          building.heightSource = source.title;
+          building.heightPriority = priority;
+          building.confidence = Math.max(building.confidence || 0, confidence);
+          changed = true;
+        }
+        if (changed) appendSourceTrace(building, source.id, "атрибуты объединены", confidence);
+        return changed;
+      }
+
+      function mergeSourceRecords(buildings, records, sourceId) {
+        const source = getSourceDefinition(sourceId);
+        let changed = 0;
+        records.forEach((record) => {
+          const target = findMatchingBuilding(buildings, record);
+          if (target) {
+            if (applySourceRecord(target, record, source)) changed += 1;
+            return;
+          }
+          const addedBuilding = createExternalBuilding(record, source);
+          if (addedBuilding) {
+            buildings.push(addedBuilding);
+            changed += 1;
+          }
+        });
+        return changed;
+      }
+
+      function getReadableFetchError(error) {
+        const message = String(error?.message || "");
+        if (error.name === "AbortError" || message.includes("aborted")) return "нет ответа";
+        if (message.includes("Failed to fetch")) return "CORS/сеть";
+        if (message.includes("CORS")) return "CORS/сеть";
+        if (message.includes("HTTP 400") || message.includes("HTTP 406")) return "запрос отклонен";
+        if (message.includes("HTTP 403")) return "доступ закрыт";
+        if (message.includes("HTTP 404")) return "слой не найден";
+        if (message.includes("HTTP 429")) return "лимит запросов";
+        if (message.includes("HTTP 50")) return "сервер недоступен";
+        return error.message || "ошибка";
+      }
+
+      function getReadableOsmError(error) {
+        const message = String(error?.message || "");
+        if (!message) return "нет ответа";
+        if (message.includes("0 контуров")) return "нет контуров в зоне";
+        if (message.includes("aborted") || message.includes("AbortError")) return "нет ответа Overpass";
+        if (message.includes("Failed to fetch") || message.includes("CORS")) return "Overpass недоступен";
+        if (message.includes("HTTP 400") || message.includes("HTTP 406") || message.includes("запрос отклонен")) return "Overpass отклонил запрос";
+        if (message.includes("HTTP 429") || message.includes("лимит запросов")) return "Overpass перегружен";
+        if (message.includes("HTTP 50") || message.includes("сервер недоступен")) return "Overpass временно недоступен";
+        return message.split(";").map((part) => part.trim()).filter((part) => part && !part.includes("aborted"))[0] || "нет ответа Overpass";
+      }
+
+      function compactResponseText(text) {
+        return String(text || "")
+          .replace(/<[^>]*>/g, " ")
+          .replace(/\s+/g, " ")
+          .trim()
+          .slice(0, 180);
+      }
+
+      function escapeHtml(value) {
+        return String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]);
+      }
+
+      async function fetchJsonDirect(url, options = {}, timeoutMs = 6000) {
+        const controller = new AbortController();
+        const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
+        try {
+          const response = await fetch(url, { ...options, signal: controller.signal });
+          if (!response.ok) {
+            let details = "";
+            try {
+              details = compactResponseText(await response.text());
+            } catch {}
+            const statusText = response.statusText ? ` ${response.statusText}` : "";
+            throw new Error(`HTTP ${response.status}${statusText}${details ? `: ${details}` : ""}`);
+          }
+          const contentType = response.headers.get("content-type") || "";
+          if (contentType.includes("json")) return await response.json();
+          const text = await response.text();
+          try {
+            return JSON.parse(text);
+          } catch {
+            throw new Error(`ответ не JSON${text ? `: ${compactResponseText(text)}` : ""}`);
+          }
+        } finally {
+          window.clearTimeout(timeoutId);
+        }
+      }
+
+      function pickFirstValue(source, keys) {
+        for (const key of keys) {
+          const value = source?.[key];
+          if (value !== undefined && value !== null && String(value).trim() !== "") return value;
+        }
+        return "";
+      }
+
+      function parseAreaSqm(value) {
+        const area = parseNumericTag(value);
+        return Number.isFinite(area) && area > 0 ? Math.round(area * 10) / 10 : null;
+      }
+
+      function collectPayloadFeatures(payload) {
+        if (Array.isArray(payload)) return payload;
+        return (
+          payload?.features ||
+          payload?.data?.features ||
+          payload?.result?.features ||
+          payload?.items ||
+          payload?.data?.items ||
+          payload?.result?.items ||
+          payload?.data?.data?.features ||
+          []
+        );
+      }
+
+      function stringifyForCadastralSearch(value) {
+        try {
+          return JSON.stringify(value);
+        } catch {
+          return String(value || "");
+        }
+      }
+
+      function normalizeRichExternalFeature(feature, sourceId, confidence = 0.86) {
+        const attrs = feature?.attributes || feature?.properties || feature?.options || feature || {};
+        const nested = attrs.options || attrs.objectData || attrs.object_data || attrs.data || {};
+        const merged = { ...attrs, ...nested };
+        const geometry = feature?.geometry || attrs.geometry || nested.geometry || {};
+        const rings = geometry.rings || geometry.coordinates;
+        const footprint =
+          normalizeGeoJsonFootprint(geometry) ||
+          (Array.isArray(rings?.[0])
+            ? rings[0].map((point) => (Array.isArray(point) ? [Number(point[1]), Number(point[0])] : null)).filter((point) => point && Number.isFinite(point[0]) && Number.isFinite(point[1]))
+            : null);
+        const point = getPointFromExternalRecord({ ...merged, geometry }, footprint);
+        const floors = parseFloorsFromExternalRecord(merged);
+        const cadastralNumber =
+          extractCadastralNumber(
+            pickFirstValue(merged, [
+              "cadnum",
+              "cad_num",
+              "cad_number",
+              "cadastralNumber",
+              "cadastral_number",
+              "CADNUM",
+              "CAD_NUM",
+              "CAD_NUMBER",
+              "KN_OKS",
+              "KAD_NUM",
+              "KADASTR",
+            ]),
+          ) || extractCadastralNumber(stringifyForCadastralSearch(merged));
+        const registryNumber = String(
+          pickFirstValue(merged, ["reestrNumber", "reestr_number", "registryNumber", "registry_number", "REGISTRY_NUMBER", "REESTR_NUMBER", "ACCOUNT_NUMBER", "OBJECTID", "id"]),
+        ).trim();
+        return {
+          sourceId,
+          id: String(pickFirstValue(merged, ["id", "object_id", "global_id", "OBJECTID", "fid", "uid", "uidRonew", "guid", "GUID"]) || registryNumber || cadastralNumber || ""),
+          name: String(pickFirstValue(merged, ["name", "NAME", "title", "objectName", "object_name", "house", "HOUSE", "buildingNumber", "BUILDING_NUMBER"]) || "").trim(),
+          address: String(
+            pickFirstValue(merged, ["address", "ADDRESS", "fullAddress", "full_address", "full_address_name", "ADDRESS_STR", "ADDR", "address_name", "building_address"]),
+          ).trim(),
+          lat: point?.[0],
+          lng: point?.[1],
+          footprint,
+          floors,
+          heightMeters: parseHeightFromExternalRecord(merged, floors),
+          cadastralNumber,
+          registryNumber,
+          buildingType: String(pickFirstValue(merged, ["type", "TYPE", "objectType", "object_type", "OBJ_TYPE", "buildingType", "building_type", "CLASSID"]) || "").trim(),
+          purpose: String(pickFirstValue(merged, ["purpose", "PURPOSE", "assignation", "ASSIGNATION", "Назначение", "usage", "USAGE"]) || "").trim(),
+          areaSqm: parseAreaSqm(pickFirstValue(merged, ["area", "AREA", "areaSqm", "area_sqm", "square", "SQUARE", "Площадь общая (кв.м.)"])),
+          yearBuilt: parseNumericTag(pickFirstValue(merged, ["yearBuilt", "year_built", "build_year", "YEAR_BLD", "builtYear"])),
+          fiasAddressGuid: String(pickFirstValue(merged, ["fiasAddressGuid", "fias_address_guid", "FIAS_ADDRESS_GUID", "AOGUID", "aoGuid"]) || "").trim(),
+          fiasBuildingGuid: String(pickFirstValue(merged, ["fiasBuildingGuid", "fias_building_guid", "FIAS_BUILDING_GUID", "HOUSEGUID", "houseGuid"]) || "").trim(),
+          confidence,
+          raw: merged,
+        };
+      }
+
+      function normalizeArcGisFeature(feature) {
+        const attrs = feature.attributes || feature.properties || feature;
+        const geometry = feature.geometry || {};
+        const rings = geometry.rings || geometry.coordinates;
+        const footprint =
+          normalizeGeoJsonFootprint(geometry) ||
+          (Array.isArray(rings?.[0])
+            ? rings[0].map((point) => (Array.isArray(point) ? [Number(point[1]), Number(point[0])] : null)).filter((point) => point && Number.isFinite(point[0]) && Number.isFinite(point[1]))
+            : null);
+        const point = getPointFromExternalRecord({ ...attrs, geometry }, footprint);
+        const floors = parseFloorsFromExternalRecord(attrs);
+        return {
+          sourceId: "regional",
+          id: String(attrs.OBJECTID || attrs.objectid || attrs.id || ""),
+          name: attrs.NAME || attrs.name || attrs.ADDRESS || attrs.address || "",
+          address: attrs.ADDRESS || attrs.address || attrs.addr || "",
+          lat: point?.[0],
+          lng: point?.[1],
+          footprint,
+          floors,
+          heightMeters: parseHeightFromExternalRecord(attrs, floors),
+          cadastralNumber: extractCadastralNumber(attrs.KN_OKS || attrs.CADNUM || attrs.cadnum || attrs.cadastral_number),
+          buildingType: attrs.TYPE || attrs.type || attrs.CLASSID || "",
+          yearBuilt: parseNumericTag(attrs.YEAR_BLD || attrs.year_built || attrs.build_year),
+          confidence: 0.82,
+        };
+      }
+
+      function buildDirectLayerUrl(bounds) {
+        const rawUrl = state.openData.directLayerUrl;
+        if (!rawUrl) return "";
+        if (rawUrl.includes("{bbox}")) return rawUrl.replace("{bbox}", getBoundsArray(bounds).join(","));
+        const url = new URL(rawUrl, window.location.href);
+        if (/FeatureServer\/\d+\/?$/i.test(url.pathname) || /MapServer\/\d+\/?$/i.test(url.pathname)) {
+          url.pathname = url.pathname.replace(/\/?$/, "/query");
+          url.searchParams.set("f", "geojson");
+          url.searchParams.set("where", "1=1");
+          url.searchParams.set("outFields", "*");
+          url.searchParams.set("returnGeometry", "true");
+          url.searchParams.set("geometryType", "esriGeometryEnvelope");
+          url.searchParams.set("spatialRel", "esriSpatialRelIntersects");
+          url.searchParams.set("inSR", "4326");
+          url.searchParams.set("outSR", "4326");
+          url.searchParams.set("geometry", getBoundsArray(bounds).join(","));
+        }
+        return url.toString();
+      }
+
+      async function fetchRegionalSource(bounds, buildings) {
+        const sourceId = "regional";
+        const url = buildDirectLayerUrl(bounds);
+        if (!url) {
+          setSourceStatus(sourceId, "idle", "укажите URL слоя");
+          return 0;
+        }
+        setSourceStatus(sourceId, "loading", "прямой слой");
+        const payload = await fetchJsonDirect(url, { headers: { Accept: "application/json,application/geo+json" } });
+        const records = payload?.features
+          ? payload.features.map(normalizeArcGisFeature).filter(Boolean)
+          : normalizeSourcePayload(payload, sourceId);
+        const queryBounds = bounds.pad(0.4);
+        const visibleRecords = records.filter((record) => {
+          if (Number.isFinite(record.lat) && Number.isFinite(record.lng)) return queryBounds.contains(L.latLng(record.lat, record.lng));
+          return record.footprint?.length ? queryBounds.intersects(L.latLngBounds(record.footprint)) : true;
+        });
+        const changed = mergeSourceRecords(buildings, visibleRecords, sourceId);
+        setSourceStatus(sourceId, "loaded", visibleRecords.length ? "объединено" : "нет совпадений", changed);
+        return changed;
+      }
+
+      function buildRgisAddressUrl(bounds) {
+        const url = new URL(RGIS_ADDRESS_WFS_ENDPOINT);
+        const [west, south, east, north] = getBoundsArray(bounds.pad(0.08));
+        url.searchParams.set("service", "WFS");
+        url.searchParams.set("version", "2.0.0");
+        url.searchParams.set("request", "GetFeature");
+        url.searchParams.set("outputFormat", "application/json");
+        url.searchParams.set("typeName", RGIS_ADDRESS_TYPE_NAME);
+        url.searchParams.set("srsName", "EPSG:4326");
+        url.searchParams.set("bbox", `${west},${south},${east},${north},EPSG:4326`);
+        url.searchParams.set("count", String(RGIS_ADDRESS_MAX_FEATURES));
+        return url.toString();
+      }
+
+      function normalizeRgisAddressFeature(feature) {
+        const record = normalizeRichExternalFeature(feature, "rgis-address", 0.9);
+        if (!record.address && record.name && /\d/.test(record.name)) record.address = record.name;
+        return record;
+      }
+
+      async function fetchRgisAddressSource(bounds, buildings) {
+        const sourceId = "rgis-address";
+        setSourceStatus(sourceId, "loading", "адресный слой");
+        const payload = await fetchJsonDirect(
+          buildRgisAddressUrl(bounds),
+          { credentials: "omit", headers: { Accept: "application/json,application/geo+json" } },
+          9000,
+        );
+        const queryBounds = bounds.pad(0.25);
+        const records = collectPayloadFeatures(payload)
+          .map(normalizeRgisAddressFeature)
+          .filter((record) => record && (record.cadastralNumber || record.address || record.registryNumber))
+          .filter((record) => {
+            if (Number.isFinite(record.lat) && Number.isFinite(record.lng)) return queryBounds.contains(L.latLng(record.lat, record.lng));
+            return record.footprint?.length ? queryBounds.intersects(L.latLngBounds(record.footprint)) : true;
+          });
+        const changed = mergeSourceRecords(buildings, records, sourceId);
+        setSourceStatus(sourceId, "loaded", records.length ? "адреса/кадастр" : "нет данных", changed);
+        return changed;
+      }
+
+      function getBuildingsWithCadastralNumbers(buildings) {
+        const seen = new Set();
+        return buildings
+          .filter((building) => building.cadastralNumber && !building.nspdChecked)
+          .filter((building) => {
+            if (seen.has(building.cadastralNumber)) return false;
+            seen.add(building.cadastralNumber);
+            return true;
+          })
+          .slice(0, NSPD_MAX_CADASTRAL_LOOKUPS);
+      }
+
+      async function fetchNspdRecordByCadastralNumber(cadastralNumber) {
+        const url = new URL(NSPD_SEARCH_ENDPOINT);
+        url.searchParams.set("query", cadastralNumber);
+        url.searchParams.set("thematicSearchId", "1");
+        const payload = await fetchJsonDirect(
+          url.toString(),
+          {
+            headers: { Accept: "application/json" },
+          },
+          6500,
+        );
+        return collectPayloadFeatures(payload)
+          .map((feature) => normalizeRichExternalFeature(feature, "nspd", 0.88))
+          .find((record) => record.cadastralNumber === cadastralNumber || extractCadastralNumber(stringifyForCadastralSearch(record.raw)) === cadastralNumber);
+      }
+
+      async function fetchNspdSource(bounds, buildings) {
+        const sourceId = "nspd";
+        const targets = getBuildingsWithCadastralNumbers(buildings);
+        if (!targets.length) {
+          setSourceStatus(sourceId, "idle", "нет кадастровых номеров");
+          return 0;
+        }
+        setSourceStatus(sourceId, "loading", `ПКК ${targets.length}`);
+        const records = [];
+        for (const building of targets) {
+          try {
+            const record = await fetchNspdRecordByCadastralNumber(building.cadastralNumber);
+            building.nspdChecked = true;
+            if (record) records.push(record);
+          } catch (error) {
+            const message = String(error?.message || "");
+            if (message.includes("HTTP 403") || message.includes("Failed to fetch") || message.includes("CORS") || error.name === "AbortError" || message.includes("aborted")) throw error;
+            building.nspdChecked = true;
+          }
+        }
+        const changed = mergeSourceRecords(buildings, records, sourceId);
+        setSourceStatus(sourceId, "loaded", records.length ? "ПКК обогащено" : "нет совпадений", changed);
+        return changed;
+      }
+
+      async function fetchDirectOpenSource(sourceId, bounds, buildings) {
+        try {
+          if (sourceId === "regional") return await fetchRegionalSource(bounds, buildings);
+          if (sourceId === "rgis-address") return await fetchRgisAddressSource(bounds, buildings);
+          if (sourceId === "nspd") return await fetchNspdSource(bounds, buildings);
+          return 0;
+        } catch (error) {
+          setSourceStatus(sourceId, "error", getReadableFetchError(error));
+          return 0;
+        }
+      }
+
+      function applyNeighborTypologyEstimate(buildings) {
+        const sourceId = "neighbor-typology";
+        const source = getSourceDefinition(sourceId);
+        let changed = 0;
+        buildings.forEach((building) => {
+          if (Number.isFinite(building.floors)) return;
+          const neighbors = buildings
+            .filter((candidate) => candidate !== building && Number.isFinite(candidate.floors))
+            .map((candidate) => ({ building: candidate, distance: distanceMeters({ lat: building.lat, lng: building.lng }, { lat: candidate.lat, lng: candidate.lng }) }))
+            .filter((candidate) => candidate.distance <= 360)
+            .sort((a, b) => a.distance - b.distance)
+            .slice(0, 6);
+          if (neighbors.length < 2) return;
+          const values = neighbors.map((item) => item.building.floors).sort((a, b) => a - b);
+          const median = values[Math.floor(values.length / 2)];
+          const record = { floors: median, heightMeters: Math.round(median * FLOOR_HEIGHT_METERS), confidence: 0.38 };
+          if (applySourceRecord(building, record, source)) {
+            appendSourceTrace(building, sourceId, `${neighbors.length} соседних зданий`, record.confidence);
+            changed += 1;
+          }
+        });
+        setSourceStatus(sourceId, changed ? "loaded" : "idle", changed ? "оценено" : "нет соседей", changed);
+        return changed;
+      }
+
+      async function enrichBuildingsWithOpenSources(buildings, bounds, token, { osmStatus = "loaded", osmMessage = "Overpass" } = {}) {
+        syncOpenDataControls({ save: false });
+        setSourceStatus("osm", osmStatus, osmMessage, buildings.length);
+        DIRECT_SOURCE_IDS.filter((sourceId) => !isSourceActive(sourceId)).forEach((sourceId) => setSourceStatus(sourceId, "idle", "отключено"));
+        if (isSourceActive("neighbor-typology")) applyNeighborTypologyEstimate(buildings);
+        else setSourceStatus("neighbor-typology", "idle", "отключено");
+        if (state.detailedBuildings === buildings) {
+          renderTypeOptions();
+          state.filtersTouched ? applyFilters() : resetFilters();
+          updateOsmStatus();
+        }
+        for (const sourceId of DIRECT_SOURCE_IDS) {
+          if (token !== state.requestToken) return buildings;
+          if (!isSourceActive(sourceId)) continue;
+          await fetchDirectOpenSource(sourceId, bounds, buildings);
+          if (state.detailedBuildings === buildings) {
+            renderTypeOptions();
+            state.filtersTouched ? applyFilters() : resetFilters();
+            updateOsmStatus();
+          }
+        }
+        if (token !== state.requestToken) return buildings;
+        if (isSourceActive("neighbor-typology")) applyNeighborTypologyEstimate(buildings);
+        return buildings;
+      }
+
+      function commitDetailedBuildings(buildings, bounds, cacheKey, { persist = true, complete = true } = {}) {
+        if (!areQueryBoundsRelevant(bounds)) return false;
+        state.detailedBuildings = buildings;
+        state.loadedBounds = bounds;
+        if (cacheKey) {
+          const previousCache = state.zoneCache.get(cacheKey);
+          const canReuseCompleteState = previousCache?.complete === true && buildings.length >= (previousCache.buildings?.length || 0);
+          const cacheComplete = complete || canReuseCompleteState;
+          state.zoneCache.set(cacheKey, { buildings, bounds, complete: cacheComplete, updatedAt: Date.now() });
+          if (persist) scheduleOpenDataCacheWrite(cacheKey, buildings, bounds, { complete: cacheComplete });
+        }
+        state.osmSourceStatus = complete ? "loaded" : "loading";
+        renderTypeOptions();
+        state.filtersTouched ? applyFilters() : resetFilters();
+        updateOsmStatus();
+        return true;
+      }
+
+      function appendUniqueBuildings(buildings, additions) {
+        const knownIds = new Map(buildings.map((building, index) => [building.id, index]));
+        let added = 0;
+        additions.forEach((building) => {
+          if (knownIds.has(building.id)) {
+            const index = knownIds.get(building.id);
+            const current = buildings[index];
+            if (current?.isApproxFootprint && !building.isApproxFootprint) {
+              buildings[index] = { ...current, ...building };
+              added += 1;
+            }
+            return;
+          }
+          knownIds.set(building.id, buildings.length);
+          buildings.push(building);
+          added += 1;
+        });
+        return added;
+      }
+
+      function loadOsmPartsInBackground(buildings, queryBounds, viewBounds, token, cacheKey, sourceHost, { complete = false } = {}) {
+        fetchOsmFootprintsDirect([buildOverpassPartsQuery(queryBounds)], queryBounds)
+          .then((partsResult) => {
+            if (token !== state.requestToken) return;
+            if (!areQueryBoundsRelevant(viewBounds)) return;
+            const added = appendUniqueBuildings(buildings, partsResult.footprints);
+            if (!added) return;
+            setSourceStatus("osm", "loaded", `${sourceHost} + части`, buildings.length);
+            commitDetailedBuildings(buildings, viewBounds, cacheKey, { complete });
+          })
+          .catch(() => {});
+      }
+
+      function loadOsmCentersInBackground(buildings, bounds, token, cacheKey) {
+        return fetchOsmFootprintsDirect([buildOverpassCenterQuery(bounds)], bounds, {
+          allowEmpty: true,
+          timeoutMs: CENTER_OVERPASS_TIMEOUT_MS,
+          endpointLimit: CENTER_OVERPASS_ENDPOINT_LIMIT,
+        })
+          .then((centerResult) => {
+            if (token !== state.requestToken) return null;
+            if (!areQueryBoundsRelevant(bounds)) return null;
+            const added = appendUniqueBuildings(buildings, centerResult.footprints);
+            if (added) {
+              setSourceStatus("osm", "loading", "быстрые центры", buildings.length);
+              commitDetailedBuildings(buildings, bounds, cacheKey, { complete: false });
+            }
+            return { added, count: centerResult.footprints.length, errors: centerResult.errors || [] };
+          })
+          .catch((error) => ({ added: 0, count: 0, error }));
+      }
+
+      async function loadOsmTilesInBackground(buildings, bounds, token, cacheKey, sourceHost) {
+        const tiles = splitBoundsIntoTiles(bounds);
+        let loadedTiles = 0;
+        let failedTiles = 0;
+        let addedBuildings = 0;
+        let firstError = null;
+        let firstWarning = null;
+        let hasCommittedProgress = false;
+        const failedFirstPass = [];
+        updateLoadTimer(token, { phase: "тайлы", tilesLoaded: 0, tilesFailed: 0, tilesTotal: tiles.length, buildings: buildings.length });
+
+        const processTile = async (tileBounds, attempt) => {
+          try {
+            const tileResult = await fetchOsmFootprintsDirect([buildOverpassQuery(tileBounds)], tileBounds, {
+              allowEmpty: true,
+              timeoutMs: attempt ? TILE_OVERPASS_TIMEOUT_MS + 10000 : TILE_OVERPASS_TIMEOUT_MS,
+              endpointLimit: TILE_OVERPASS_ENDPOINT_LIMIT,
+            });
+            if (token !== state.requestToken) return;
+            if (!areQueryBoundsRelevant(bounds)) return;
+            loadedTiles += 1;
+            if (!firstWarning && tileResult.errors?.length) firstWarning = new Error(tileResult.errors[0]);
+            const added = appendUniqueBuildings(buildings, tileResult.footprints);
+            addedBuildings += added;
+            if (added) hasCommittedProgress = true;
+            updateLoadTimer(token, { phase: attempt ? "повтор тайлов" : "тайлы", tilesLoaded: loadedTiles, tilesFailed: failedTiles, tilesTotal: tiles.length, buildings: buildings.length });
+            setSourceStatus("osm", "loading", `${sourceHost} · ${loadedTiles}/${tiles.length}${failedTiles ? `, ошибок ${failedTiles}` : ""}`, buildings.length);
+            if (added) commitDetailedBuildings(buildings, bounds, cacheKey, { complete: false });
+          } catch (error) {
+            if (attempt === 0) {
+              failedFirstPass.push(tileBounds);
+              return;
+            }
+            failedTiles += 1;
+            if (!firstError) firstError = error;
+            updateLoadTimer(token, { phase: "повтор тайлов", tilesLoaded: loadedTiles, tilesFailed: failedTiles, tilesTotal: tiles.length, buildings: buildings.length });
+            setSourceStatus("osm", buildings.length ? "loading" : "error", `${sourceHost} · ${loadedTiles}/${tiles.length}, ошибок ${failedTiles}`, buildings.length);
+          }
+        };
+
+        const runTileQueue = async (queue, attempt = 0) => {
+          let cursor = 0;
+          const loadNextTile = async () => {
+            while (cursor < queue.length) {
+              const tileBounds = queue[cursor];
+              cursor += 1;
+              if (token !== state.requestToken) return;
+              await processTile(tileBounds, attempt);
+            }
+          };
+          await Promise.all(Array.from({ length: Math.min(OSM_TILE_LOAD_CONCURRENCY, queue.length) }, loadNextTile));
+        };
+
+        await runTileQueue(tiles, 0);
+        if (token === state.requestToken && failedFirstPass.length) {
+          updateLoadTimer(token, { phase: "повтор тайлов", buildings: buildings.length });
+          await runTileQueue(failedFirstPass, 1);
+        }
+        if (token === state.requestToken) {
+          const complete = loadedTiles === tiles.length && failedTiles === 0;
+          const message = complete ? sourceHost : `${sourceHost} · частично ${loadedTiles}/${tiles.length}${failedTiles ? `, ошибок ${failedTiles}` : ""}`;
+          setSourceStatus("osm", complete ? "loaded" : buildings.length ? "loading" : "error", message, buildings.length);
+          if (buildings.length && (hasCommittedProgress || !state.zoneCache.get(cacheKey)?.complete)) commitDetailedBuildings(buildings, bounds, cacheKey, { complete });
+          finishLoadTimer(token, { complete, phase: complete ? "полная прогрузка" : "частично, есть пустые места", buildings: buildings.length });
+        }
+        return { loadedTiles, failedTiles, addedBuildings, tileCount: tiles.length, complete: loadedTiles === tiles.length && failedTiles === 0, error: firstError || firstWarning };
+      }
+
+      function enrichOpenDataInBackground(buildings, bounds, token, cacheKey, options) {
+        enrichBuildingsWithOpenSources(buildings, bounds, token, options)
+          .then((enrichedBuildings) => {
+            if (token !== state.requestToken) return;
+            commitDetailedBuildings(enrichedBuildings, bounds, cacheKey, { complete: options?.cacheComplete !== false });
+          })
+          .catch((error) => {
+            if (token !== state.requestToken) return;
+            elements.status.textContent = `OSM контуры: ${buildings.length}; часть внешних источников недоступна (${getReadableFetchError(error)})`;
+            updateOsmStatus();
+          });
+      }
+
+      async function loadOsmFootprints({ force = false } = {}) {
+        const zoom = map.getZoom();
+        const bounds = getCurrentQueryBounds();
+        if (zoom < state.scale.loadZoom) {
+          cancelActiveLoad("ожидание масштаба");
+          state.osmSourceStatus = "idle";
+          setSourceStatus("osm", "idle", "приблизьте карту");
+          elements.status.textContent = `Приблизьте карту до ${formatScaleForZoom(state.scale.loadZoom)} или крупнее для загрузки OSM-контуров`;
+          elements.status.classList.remove("error");
+          renderDetailedBuildings();
+          renderZoneSummary();
+          updateLegend();
+          return;
+        }
+        if (getBboxArea(bounds) > MAX_OVERPASS_BBOX_AREA) {
+          cancelActiveLoad("зона слишком большая");
+          state.osmSourceStatus = "idle";
+          setSourceStatus("osm", "idle", "зона слишком большая");
+          elements.status.textContent = "Зона слишком большая для Overpass, приблизьте карту";
+          elements.status.classList.remove("error");
+          renderDetailedBuildings();
+          renderZoneSummary();
+          updateLegend();
+          return;
+        }
+        const visibleBounds = map.getBounds().pad(0.08);
+        if (!force && boundsContain(visibleBounds, state.loadedBounds)) {
+          state.osmSourceStatus = "loaded";
+          updateOsmStatus();
+          renderDetailedBuildings();
+          renderZoneSummary();
+          updateLegend();
+          return;
+        }
+        const cacheKey = getBoundsKey(bounds);
+        const token = ++state.requestToken;
+        startLoadTimer(token, "старт");
+        let cached = state.zoneCache.get(cacheKey) || null;
+        if (!cached) {
+          cached = await readOpenDataCacheEntry(cacheKey, bounds);
+          if (token !== state.requestToken) return;
+        }
+        if (cached) {
+          if (!commitDetailedBuildings(cached.buildings, cached.bounds, cacheKey, { persist: false, complete: cached.complete !== false })) return;
+          updateLoadTimer(token, { phase: cached.complete === false ? "кеш + обновление" : "кеш", buildings: cached.buildings.length });
+          setSourceStatus("osm", "loaded", cached.complete === false ? "кеш + обновление" : "кеш", cached.buildings.length);
+          if (!force && isCachedZoneFresh(cached)) {
+            finishLoadTimer(token, { complete: true, phase: "кеш", buildings: cached.buildings.length });
+            return;
+          }
+        }
+        state.osmSourceStatus = "loading";
+        setSourceStatus("osm", "loading", "Overpass");
+        elements.status.textContent = "Загружаю OSM-контуры и открытые источники для текущей видимой зоны...";
+        elements.status.classList.remove("error");
+        elements.selectionTitle.textContent = "Видимая зона";
+        elements.selectionMeta.textContent = `OSM / Overpass + открытые данные, ${formatScaleForZoom(zoom)}`;
+        updateLegend();
+        renderZoneSummary();
+        let lastError = null;
+        const liveBuildings = [];
+        let centerLoadPromise = null;
+        let tileLoadPromise = null;
+        let tileLoadSummary = null;
+        const finishQuickFallback = async () => {
+          if (!centerLoadPromise) return false;
+          const centerSummary = await centerLoadPromise.catch((error) => ({ error }));
+          if (token !== state.requestToken) return true;
+          if (!areQueryBoundsRelevant(bounds)) return true;
+          if (centerSummary?.error) lastError = centerSummary.error;
+          else if (centerSummary?.errors?.length && !centerSummary.count) lastError = new Error(centerSummary.errors[0]);
+          if (!liveBuildings.length) return false;
+          enrichOpenDataInBackground(liveBuildings, bounds, token, cacheKey, {
+            osmStatus: "loaded",
+            cacheComplete: false,
+            osmMessage: "быстрые центры",
+          });
+          finishLoadTimer(token, { complete: false, phase: "готово для работы", buildings: liveBuildings.length });
+          return true;
+        };
+        const finishTileFallback = async () => {
+          if (!tileLoadPromise) return false;
+          elements.status.textContent = "Центр пустой; ищу здания по всей видимой зоне...";
+          tileLoadSummary = await tileLoadPromise.catch(() => null);
+          if (token !== state.requestToken) return true;
+          if (!areQueryBoundsRelevant(bounds)) return true;
+          if (tileLoadSummary?.error && !liveBuildings.length) lastError = tileLoadSummary.error;
+          if (!liveBuildings.length) return false;
+          enrichOpenDataInBackground(liveBuildings, bounds, token, cacheKey, {
+            osmStatus: "loaded",
+            cacheComplete: tileLoadSummary?.complete === true,
+            osmMessage: "тайлы видимой зоны",
+          });
+          finishLoadTimer(token, { complete: tileLoadSummary?.complete === true, phase: "готово для работы", buildings: liveBuildings.length });
+          return true;
+        };
+        try {
+          const fastBounds = shouldLoadFullBoundsDirect(bounds, zoom) ? bounds : getFastOsmBounds(bounds);
+          const isPartialOsmBounds =
+            fastBounds.getSouth() > bounds.getSouth() || fastBounds.getWest() > bounds.getWest() || fastBounds.getNorth() < bounds.getNorth() || fastBounds.getEast() < bounds.getEast();
+          centerLoadPromise = loadOsmCentersInBackground(liveBuildings, bounds, token, cacheKey);
+          if (isPartialOsmBounds) tileLoadPromise = loadOsmTilesInBackground(liveBuildings, bounds, token, cacheKey, "Overpass");
+          const osmResult = await fetchOsmFootprintsDirect(buildOverpassQueries(fastBounds), fastBounds, {
+            allowEmpty: true,
+            timeoutMs: isPartialOsmBounds ? FAST_OVERPASS_TIMEOUT_MS : TILE_OVERPASS_TIMEOUT_MS,
+          });
+          if (token !== state.requestToken) return;
+          if (!areQueryBoundsRelevant(bounds)) return;
+          if (!osmResult.footprints.length && osmResult.errors?.length) lastError = new Error(osmResult.errors[0]);
+          appendUniqueBuildings(liveBuildings, osmResult.footprints);
+          if (liveBuildings.length) {
+            const host = getEndpointHost(osmResult.endpoint);
+            setSourceStatus("osm", isPartialOsmBounds ? "loading" : "loaded", isPartialOsmBounds ? `${host} · центр` : host, liveBuildings.length);
+            commitDetailedBuildings(liveBuildings, bounds, cacheKey, { complete: !isPartialOsmBounds });
+            updateLoadTimer(token, { phase: isPartialOsmBounds ? "центр + тайлы" : "полная зона", buildings: liveBuildings.length });
+            if (!isPartialOsmBounds) finishLoadTimer(token, { complete: true, phase: "полная прогрузка", buildings: liveBuildings.length });
+            elements.status.textContent = isPartialOsmBounds
+              ? `OSM контуры: ${liveBuildings.length}; остальная видимая зона догружается частями...`
+              : `OSM контуры: ${liveBuildings.length}; внешние источники догружаются...`;
+            loadOsmPartsInBackground(liveBuildings, fastBounds, bounds, token, cacheKey, host, { complete: !isPartialOsmBounds });
+            enrichOpenDataInBackground(liveBuildings, bounds, token, cacheKey, {
+              osmStatus: "loaded",
+              cacheComplete: !isPartialOsmBounds,
+              osmMessage: isPartialOsmBounds ? `${host} · центр` : host,
+            });
+            return;
+          }
+          if (await finishQuickFallback()) return;
+          if (await finishTileFallback()) return;
+          if (lastError || tileLoadSummary?.failedTiles) {
+            throw lastError || new Error(`не загрузились тайлы Overpass: ${tileLoadSummary.failedTiles}/${tileLoadSummary.tileCount}`);
+          }
+          elements.status.textContent = "OSM вернул 0 контуров; подгружаю прямые источники...";
+          const enrichedBuildings = await enrichBuildingsWithOpenSources(osmResult.footprints, bounds, token, {
+            osmStatus: "loaded",
+            osmMessage: "0 контуров",
+          });
+          if (token !== state.requestToken) return;
+          commitDetailedBuildings(enrichedBuildings, bounds, cacheKey);
+          finishLoadTimer(token, { complete: true, phase: "0 контуров в зоне", buildings: enrichedBuildings.length });
+          return;
+        } catch (error) {
+          lastError = error;
+        }
+        if (!tileLoadPromise) tileLoadPromise = loadOsmTilesInBackground(liveBuildings, bounds, token, cacheKey, "Overpass");
+        if (await finishQuickFallback()) return;
+        if (await finishTileFallback()) return;
+        if (token === state.requestToken) {
+          const osmError = getReadableOsmError(lastError || new Error("ошибка сети"));
+          elements.status.textContent = "OSM недоступен; пробую прямые внешние источники...";
+          const fallbackBuildings = await enrichBuildingsWithOpenSources([], bounds, token, {
+            osmStatus: "error",
+            osmMessage: osmError,
+          });
+          if (token !== state.requestToken) return;
+          if (fallbackBuildings.length) {
+            elements.status.classList.remove("error");
+            commitDetailedBuildings(fallbackBuildings, bounds, cacheKey);
+            finishLoadTimer(token, { complete: true, phase: "внешние источники", buildings: fallbackBuildings.length });
+            return;
+          }
+        }
+        state.osmSourceStatus = "error";
+        const osmError = getReadableOsmError(lastError || new Error("ошибка сети"));
+        finishLoadTimer(token, { complete: false, phase: osmError, buildings: state.detailedBuildings.length });
+        setSourceStatus("osm", "error", osmError);
+        elements.status.textContent = `Не удалось загрузить OSM-контуры: ${osmError}`;
+        elements.status.classList.add("error");
+        elements.selectionMeta.textContent = "Контуры не загружены, проверь сеть или Overpass";
+        renderDetailedBuildings();
+        renderZoneSummary();
+        updateLegend();
+      }
+
+      function scheduleOsmLoad({ force = false } = {}) {
+        cancelActiveLoad("новая зона");
+        window.clearTimeout(state.loadTimer);
+        state.loadTimer = window.setTimeout(() => loadOsmFootprints({ force }), force ? 0 : OSM_LOAD_DEBOUNCE_MS);
+      }
+
+      async function reloadOpenDataSources() {
+        syncOpenDataControls();
+        state.zoneCache.clear();
+        if (state.scaleLocked && state.detailedBuildings.length) {
+          const token = ++state.requestToken;
+          const bounds = state.loadedBounds || getCurrentQueryBounds();
+          state.osmSourceStatus = "loading";
+          elements.status.textContent = "Обновляю открытые источники для зафиксированной зоны...";
+          const enrichedBuildings = await enrichBuildingsWithOpenSources(state.detailedBuildings, bounds, token);
+          if (token !== state.requestToken) return;
+          state.detailedBuildings = enrichedBuildings;
+          state.loadedBounds = bounds;
+          state.osmSourceStatus = "loaded";
+          renderTypeOptions();
+          resetFilters();
+          updateOsmStatus();
+          return;
+        }
+        scheduleOsmLoad({ force: true });
+      }
+
+      function updateOsmStatus() {
+        const visible = getVisibleDetailBuildings();
+        const knownFloors = visible.filter((building) => Number.isFinite(building.floors)).length;
+        const knownHeight = visible.filter((building) => Number.isFinite(building.heightMeters)).length;
+        const externalSources = new Set(visible.flatMap((building) => (building.sources || []).map((source) => source.id)).filter((id) => id !== "osm" && id !== "neighbor-typology"));
+        const estimatedCount = visible.filter((building) => (building.sources || []).some((source) => source.id === "neighbor-typology")).length;
+        const loadNote = state.osmSourceStatus === "loading" ? `; загрузка ${formatElapsed(getLoadElapsedMs())}` : "";
+        elements.status.textContent =
+          `Контуры: ${state.detailedBuildings.length}; в кадре: ${visible.length}; этажность: ${knownFloors}; высота: ${knownHeight}; ` +
+          `внешние источники: ${externalSources.size}; оценка: ${estimatedCount}${loadNote}`;
+        elements.status.classList.remove("error");
+        elements.selectionTitle.textContent = "Видимая зона";
+        elements.selectionMeta.textContent = `${state.loadedBounds ? "по текущей зоне" : "нет зоны"} · ${formatScaleForZoom(map.getZoom())}`;
+      }
+
+      function getFilteredDetailBuildings() {
+        let min = Number(elements.minFloors.value);
+        let max = Number(elements.maxFloors.value);
+        if (min > max) [min, max] = [max, min];
+        const query = elements.searchInput.value.trim().toLowerCase();
+        const type = elements.typeFilter.value;
+        return state.detailedBuildings.filter((building) => {
+          const haystack =
+            `${building.name} ${building.address || ""} ${building.buildingType || ""} ${building.cadastralNumber || ""} ${building.registryNumber || ""} ` +
+            `${building.purpose || ""} ${building.fiasAddressGuid || ""} ${building.fiasBuildingGuid || ""} ${getSourceSummary(building)}`.toLowerCase();
+          const matchesFloors = !Number.isFinite(building.floors) || (building.floors >= min && building.floors <= max);
+          return matchesFloors && (!query || haystack.includes(query)) && (!type || building.buildingType === type);
+        });
+      }
+
+      function getVisibleDetailBuildings() {
+        const visibleBounds = map.getBounds().pad(0.04);
+        return getFilteredDetailBuildings().filter((building) => visibleBounds.intersects(L.latLngBounds(building.footprint)));
+      }
+
+      function renderMarkers() {
+        state.markers.clearLayers();
+        if (state.dataMode !== "csv" || map.getZoom() >= state.scale.loadZoom) return;
+        state.filteredBuildings.forEach((building) => {
+          const color = getExactFloorColor(building.floors);
+          const marker = L.circleMarker([building.lat, building.lng], { radius: Math.max(4, building.floors * 2), color, weight: 2, fillColor: color, fillOpacity: 0.68 });
+          marker.bindPopup(`
+            <div class="popup-title">${escapeHtml(building.name)}</div>
+            <div class="popup-line">${escapeHtml(building.address || "Адрес не указан")}</div>
+            <div class="popup-line"><strong>${building.floors}</strong> этажей</div>
+            <div class="popup-line">Высота: ${Number.isFinite(building.heightMeters) ? `${building.heightMeters} м` : "нет данных"}</div>
+            <div class="popup-line">${escapeHtml(building.cadastralNumber || "кадастровый номер не указан")} · ${escapeHtml(building.source || "CSV")}</div>
+            <div class="popup-line">${escapeHtml(building.buildingType || "тип не указан")} · ${escapeHtml(building.yearBuilt || "год не указан")}</div>
+          `);
+          marker.on("click", () => {
+            elements.selectionTitle.textContent = building.name;
+            elements.selectionMeta.textContent = `${building.address || "Адрес не указан"} · ${building.floors} этажей`;
+            elements.selectionDot.style.background = color;
+          });
+          marker.addTo(state.markers);
+        });
+      }
+
+      function renderDetailedBuildings() {
+        state.detailPolygons.clearLayers();
+        state.detailLabels.clearLayers();
+        if (map.getZoom() < state.scale.loadZoom) return;
+        const isSummaryScale = map.getZoom() < state.scale.detailZoom;
+        const visibleBounds = map.getBounds().pad(0.12);
+        getFilteredDetailBuildings()
+          .filter((building) => visibleBounds.intersects(L.latLngBounds(building.footprint)))
+          .forEach((building) => {
+            const color = getExactFloorColor(building.floors);
+            const hasFloors = Number.isFinite(building.floors);
+            const heightText = Number.isFinite(building.heightMeters) ? `${building.heightMeters} м` : "нет данных";
+            const polygon = L.polygon(building.footprint, {
+              color,
+              fillColor: color,
+              fillOpacity: hasFloors ? (isSummaryScale ? 0.26 : 0.34) : 0.2,
+              opacity: hasFloors ? 0.95 : 0.9,
+              weight: hasFloors ? (isSummaryScale ? 2 : 3) : 2.5,
+              dashArray: hasFloors ? null : "7 5",
+              lineJoin: "round",
+            });
+            polygon.bindPopup(`
+              <div class="popup-title">${escapeHtml(building.name)}</div>
+              <div class="popup-line">${escapeHtml(building.address || "Адрес не указан")}</div>
+              <div class="popup-line"><strong>${escapeHtml(getFloorLabel(building.floors))}</strong></div>
+              <div class="popup-line">Высота: ${escapeHtml(heightText)}</div>
+              <div class="popup-line">Источник этажности: ${escapeHtml(building.floorSource || "не указан")}</div>
+              <div class="popup-line">Источники: ${escapeHtml(getSourceSummary(building))}</div>
+              <div class="popup-line">${escapeHtml(building.cadastralNumber || "кадастровый номер не указан")} · ${escapeHtml(getConfidenceLabel(building))}</div>
+              <div class="popup-line">Учетный номер: ${escapeHtml(building.registryNumber || "не указан")}</div>
+              <div class="popup-line">${escapeHtml(building.purpose || building.buildingType || "тип не указан")} · ${escapeHtml(Number.isFinite(building.areaSqm) ? `${building.areaSqm} м²` : "площадь не указана")}</div>
+              <div class="popup-line">${escapeHtml(building.buildingType || "тип не указан")} · OSM ${escapeHtml(building.osmId)}</div>
+            `);
+            polygon.on("click", () => {
+              elements.selectionTitle.textContent = building.name;
+              elements.selectionMeta.textContent = `${getFloorLabel(building.floors)} · ${heightText} · ${getSourceSummary(building)}`;
+              elements.selectionDot.style.background = color;
+            });
+            polygon.addTo(state.detailPolygons);
+            if (map.getZoom() >= state.scale.labelZoom) {
+              L.marker(getPolygonCenter(building.footprint), {
+                interactive: false,
+                icon: L.divIcon({ className: "", html: `<span class="building-label ${state.showMeters ? "height" : ""} ${hasFloors ? "" : "unknown"}">${getBuildingLabel(building)}</span>`, iconSize: null }),
+              }).addTo(state.detailLabels);
+            }
+          });
+      }
+
+      function getKnownStats(values) {
+        const known = values.filter(Number.isFinite);
+        if (!known.length) return null;
+        return { min: Math.min(...known), avg: known.reduce((sum, value) => sum + value, 0) / known.length, max: Math.max(...known), count: known.length };
+      }
+
+      function formatNumber(value, suffix = "") {
+        if (!Number.isFinite(value)) return "-";
+        const rounded = Math.abs(value - Math.round(value)) < 0.05 ? Math.round(value) : value.toFixed(1);
+        return `${rounded}${suffix}`;
+      }
+
+      function formatInteger(value) {
+        return Math.round(value).toLocaleString("ru-RU").replace(/\u00a0/g, " ");
+      }
+
+      function getScaleDenominator(zoom = map.getZoom()) {
+        const latitude = (map.getCenter().lat * Math.PI) / 180;
+        const metersPerPixel = (156543.03392 * Math.cos(latitude)) / Math.pow(2, zoom);
+        return metersPerPixel / 0.00028;
+      }
+
+      function getNiceScaleDenominator(denominator) {
+        if (!Number.isFinite(denominator) || denominator <= 0) return null;
+        const magnitude = Math.pow(10, Math.floor(Math.log10(denominator)));
+        const normalized = denominator / magnitude;
+        const step = normalized <= 1.5 ? 1 : normalized <= 3.5 ? 2 : normalized <= 7.5 ? 5 : 10;
+        return step * magnitude;
+      }
+
+      function formatScaleForZoom(zoom = map.getZoom()) {
+        const scale = getNiceScaleDenominator(getScaleDenominator(zoom));
+        return scale ? `≈ 1:${formatInteger(scale)}` : "масштаб н/д";
+      }
+
+      function updateScaleLabels() {
+        elements.loadZoomLabel.textContent = formatScaleForZoom(state.scale.loadZoom);
+        elements.detailZoomLabel.textContent = formatScaleForZoom(state.scale.detailZoom);
+        elements.labelZoomLabel.textContent = formatScaleForZoom(state.scale.labelZoom);
+      }
+
+      function renderZoneSummary() {
+        state.summaryOverlay.clearLayers();
+        const shouldShow = map.getZoom() >= state.scale.loadZoom && map.getZoom() < state.scale.detailZoom && state.osmSourceStatus !== "error";
+        elements.zoneSummary.classList.toggle("visible", shouldShow);
+        if (!shouldShow) return;
+        const visible = getVisibleDetailBuildings();
+        const floorStats = getKnownStats(visible.map((building) => building.floors));
+        const heightStats = getKnownStats(visible.map((building) => building.heightMeters));
+        const unknown = visible.filter((building) => !Number.isFinite(building.floors)).length;
+        const isUpdating = state.osmSourceStatus === "loading";
+        L.rectangle(map.getBounds().pad(-0.035), { interactive: false, color: "#256d53", weight: 2, opacity: 0.55, dashArray: "8 7", fillColor: "#256d53", fillOpacity: 0.035 }).addTo(state.summaryOverlay);
+        elements.summaryMeta.textContent = isUpdating && !visible.length ? "загрузка источников..." : `${visible.length} контуров, без этажности: ${unknown}${isUpdating ? " · обновление" : ""}`;
+        elements.summaryMinFloors.textContent = floorStats ? formatNumber(floorStats.min) : "-";
+        elements.summaryAvgFloors.textContent = floorStats ? formatNumber(floorStats.avg) : "-";
+        elements.summaryMaxFloors.textContent = floorStats ? formatNumber(floorStats.max) : "-";
+        elements.summaryMinHeight.textContent = heightStats ? formatNumber(heightStats.min, " м") : "-";
+        elements.summaryAvgHeight.textContent = heightStats ? formatNumber(heightStats.avg, " м") : "-";
+        elements.summaryMaxHeight.textContent = heightStats ? formatNumber(heightStats.max, " м") : "-";
+      }
+
+      function renderLegend() {
+        const legend = L.control({ position: "bottomright" });
+        legend.onAdd = () => {
+          const div = L.DomUtil.create("div", "legend");
+          state.legendContainer = div;
+          updateLegend();
+          return div;
+        };
+        legend.addTo(map);
+      }
+
+      function updateLegend() {
+        if (!state.legendContainer) return;
+        const exactMode = map.getZoom() >= state.scale.detailZoom;
+        if (!exactMode) {
+          state.legendContainer.style.display = "none";
+          return;
+        }
+        state.legendContainer.style.display = "block";
+        const source = getFilteredDetailBuildings();
+        const exactFloors = [...new Set(source.map((building) => building.floors).filter(Number.isFinite))].sort((a, b) => a - b);
+        const unknownCount = source.filter((building) => !Number.isFinite(building.floors)).length;
+        const loadingNote = state.osmSourceStatus === "loading" ? `<div class="legend-row"><span class="legend-dot" style="background:${UNKNOWN_DATA_COLOR}"></span><span>загрузка источников...</span></div>` : "";
+        const unknownRow = unknownCount ? `<div class="legend-row"><span class="legend-dot" style="background:${UNKNOWN_DATA_COLOR}"></span><span>контур без этажности: ${unknownCount}</span></div>` : "";
+        state.legendContainer.innerHTML = `
+          <div class="legend-title">${state.showMeters ? "Высота и этажность" : "Точная этажность"}</div>
+          ${loadingNote}
+          ${exactFloors
+            .map((floors) => {
+              const meters = Math.round(floors * FLOOR_HEIGHT_METERS);
+              return `<div class="legend-row"><span class="legend-dot" style="background:${getExactFloorColor(floors)}"></span><span>${state.showMeters ? `${meters} м · ${getFloorLabel(floors)}` : getFloorLabel(floors)}</span></div>`;
+            })
+            .join("")}
+          ${unknownRow}
+        `;
+      }
+
+      function renderTypeOptions() {
+        const current = elements.typeFilter.value;
+        const types = [...new Set([...state.allBuildings, ...state.detailedBuildings].map((building) => building.buildingType).filter(Boolean))].sort();
+        elements.typeFilter.innerHTML = '<option value="">Все типы</option>' + types.map((type) => `<option value="${escapeHtml(type)}">${escapeHtml(type)}</option>`).join("");
+        elements.typeFilter.value = types.includes(current) ? current : "";
+      }
+
+      function renderStats() {
+        const buildings = state.dataMode === "csv" ? state.filteredBuildings : getFilteredDetailBuildings();
+        const knownFloors = buildings.map((building) => building.floors).filter(Number.isFinite);
+        const total = buildings.length;
+        const avg = knownFloors.length ? knownFloors.reduce((sum, value) => sum + value, 0) / knownFloors.length : 0;
+        elements.totalStat.textContent = total;
+        elements.avgStat.textContent = avg ? avg.toFixed(1) : "0";
+        elements.distribution.innerHTML = categories
+          .map((category) => {
+            const count = buildings.filter((building) => Number.isFinite(building.floors) && building.floors >= category.min && building.floors <= category.max).length;
+            const width = total ? Math.round((count / total) * 100) : 0;
+            return `<div class="dist-row"><span>${category.label}</span><span class="bar-track"><span class="bar-fill" style="width:${width}%;background:${category.color}"></span></span><strong>${count}</strong></div>`;
+          })
+          .join("");
+      }
+
+      function applyFilters() {
+        let min = Number(elements.minFloors.value);
+        let max = Number(elements.maxFloors.value);
+        if (min > max) [min, max] = [max, min];
+        elements.minLabel.textContent = min;
+        elements.maxLabel.textContent = max;
+        const query = elements.searchInput.value.trim().toLowerCase();
+        const type = elements.typeFilter.value;
+        state.filteredBuildings = state.allBuildings.filter((building) => {
+          const haystack = `${building.name} ${building.address || ""} ${building.cadastralNumber || ""}`.toLowerCase();
+          return building.floors >= min && building.floors <= max && (!query || haystack.includes(query)) && (!type || building.buildingType === type);
+        });
+        renderMarkers();
+        renderDetailedBuildings();
+        renderZoneSummary();
+        renderStats();
+        updateLegend();
+        if (state.osmSourceStatus === "loaded") updateOsmStatus();
+      }
+
+      function resetFilters() {
+        const floors = [...state.allBuildings, ...state.detailedBuildings].map((building) => building.floors).filter(Number.isFinite);
+        if (!floors.length) return;
+        const min = Math.min(...floors);
+        const max = Math.max(...floors);
+        elements.searchInput.value = "";
+        elements.typeFilter.value = "";
+        elements.minFloors.min = min;
+        elements.minFloors.max = max;
+        elements.maxFloors.min = min;
+        elements.maxFloors.max = max;
+        elements.minFloors.value = min;
+        elements.maxFloors.value = max;
+        applyFilters();
+      }
+
+      function parseCsvFile(file) {
+        elements.status.textContent = "Обработка CSV...";
+        elements.status.classList.remove("error");
+        Papa.parse(file, {
+          header: true,
+          skipEmptyLines: true,
+          complete: (result) => {
+            try {
+              const fields = result.meta.fields || [];
+              const required = ["name", "lat", "lng", "floors"];
+              const missed = required.filter((field) => !fields.includes(field));
+              if (missed.length) throw new Error(`Нет колонок: ${missed.join(", ")}`);
+              const rows = result.data
+                .map((row, index) => ({
+                  id: `csv-${index + 1}`,
+                  name: String(row.name || "").trim(),
+                  lat: Number(row.lat),
+                  lng: Number(row.lng),
+                  floors: Number(row.floors),
+                  address: String(row.address || "").trim(),
+                  buildingType: String(row.building_type || row.buildingType || "").trim(),
+                  yearBuilt: row.year_built ? Number(row.year_built) : undefined,
+                  heightMeters: row.height_meters || row.height ? parseNumericTag(row.height_meters || row.height) : undefined,
+                  cadastralNumber: extractCadastralNumber(row.cadastral_number || row.cadastralNumber || row.cadnum),
+                  source: String(row.source || "CSV").trim(),
+                }))
+                .filter((building) => building.name && Number.isFinite(building.lat) && Number.isFinite(building.lng) && Number.isFinite(building.floors));
+              if (!rows.length) throw new Error("Не найдено валидных строк");
+              state.dataMode = "csv";
+              state.allBuildings = rows;
+              state.filtersTouched = false;
+              elements.datasetName.textContent = file.name;
+              elements.status.textContent = `Загружено: ${rows.length} зданий`;
+              renderTypeOptions();
+              resetFilters();
+              map.fitBounds(rows.map((building) => [building.lat, building.lng]), { padding: [36, 36] });
+            } catch (error) {
+              elements.status.textContent = error.message;
+              elements.status.classList.add("error");
+            }
+          },
+          error: () => {
+            elements.status.textContent = "Не удалось прочитать CSV";
+            elements.status.classList.add("error");
+          },
+        });
+      }
+
+      function getCurrentScaleText() {
+        return formatScaleForZoom(state.scaleLocked && state.lockedGenerationZoom !== null ? state.lockedGenerationZoom : map.getZoom());
+      }
+
+      function updateLockScaleButton() {
+        elements.lockScaleButton.classList.toggle("active", state.scaleLocked);
+        elements.lockScaleButton.innerHTML = state.scaleLocked ? `<i data-lucide="lock-keyhole"></i>Генерация зафиксирована ${getCurrentScaleText()}` : '<i data-lucide="lock"></i>Зафиксировать масштаб';
+        lucide.createIcons();
+      }
+
+      function toggleScaleLock() {
+        if (!state.scaleLocked) {
+          const zoom = map.getZoom();
+          state.scaleLocked = true;
+          state.lockedGenerationZoom = zoom;
+          cancelActiveLoad("масштаб зафиксирован");
+          elements.selectionTitle.textContent = "Генерация зафиксирована";
+          elements.selectionMeta.textContent = `${formatScaleForZoom(zoom)} · zoom карты работает, новые OSM-запросы отключены`;
+        } else {
+          state.scaleLocked = false;
+          state.lockedGenerationZoom = null;
+          elements.selectionTitle.textContent = "Видимая зона";
+          elements.selectionMeta.textContent = `Масштаб свободный · ${formatScaleForZoom(map.getZoom())}`;
+          scheduleOsmLoad({ force: true });
+        }
+        renderDetailedBuildings();
+        renderZoneSummary();
+        updateLegend();
+        updateLockScaleButton();
+      }
+
+      function syncScaleControls({ reload = true } = {}) {
+        const loadZoom = Number(elements.loadZoom.value);
+        let detailZoom = Number(elements.detailZoom.value);
+        let labelZoom = Number(elements.labelZoom.value);
+        detailZoom = Math.max(loadZoom + 1, detailZoom);
+        labelZoom = Math.max(detailZoom, labelZoom);
+        elements.detailZoom.value = detailZoom;
+        elements.labelZoom.value = labelZoom;
+        state.scale.loadZoom = loadZoom;
+        state.scale.detailZoom = detailZoom;
+        state.scale.labelZoom = labelZoom;
+        updateScaleLabels();
+        renderMarkers();
+        renderDetailedBuildings();
+        renderZoneSummary();
+        updateLegend();
+        if (reload) scheduleOsmLoad({ force: true });
+      }
+
+      elements.uploadButton.addEventListener("click", () => elements.fileInput.click());
+      elements.fileInput.addEventListener("change", (event) => {
+        const file = event.target.files[0];
+        if (file) parseCsvFile(file);
+      });
+      elements.sourceToggles.forEach((input) => input.addEventListener("change", () => syncOpenDataControls()));
+      [elements.directLayerInput].forEach((input) => {
+        input.addEventListener("input", () => syncOpenDataControls({ save: false }));
+        input.addEventListener("change", () => syncOpenDataControls());
+      });
+      elements.loadSourcesButton.addEventListener("click", () => reloadOpenDataSources());
+      ["dragenter", "dragover"].forEach((eventName) => {
+        elements.dropzone.addEventListener(eventName, (event) => {
+          event.preventDefault();
+          elements.dropzone.classList.add("dragging");
+        });
+      });
+      ["dragleave", "drop"].forEach((eventName) => {
+        elements.dropzone.addEventListener(eventName, (event) => {
+          event.preventDefault();
+          elements.dropzone.classList.remove("dragging");
+        });
+      });
+      elements.dropzone.addEventListener("drop", (event) => {
+        const file = event.dataTransfer.files[0];
+        if (file) parseCsvFile(file);
+      });
+      elements.searchInput.addEventListener("input", () => {
+        state.filtersTouched = true;
+        applyFilters();
+      });
+      elements.minFloors.addEventListener("input", () => {
+        state.filtersTouched = true;
+        applyFilters();
+      });
+      elements.maxFloors.addEventListener("input", () => {
+        state.filtersTouched = true;
+        applyFilters();
+      });
+      elements.typeFilter.addEventListener("change", () => {
+        state.filtersTouched = true;
+        applyFilters();
+      });
+      elements.resetButton.addEventListener("click", () => {
+        state.filtersTouched = false;
+        resetFilters();
+      });
+      [elements.loadZoom, elements.detailZoom, elements.labelZoom].forEach((input) => input.addEventListener("input", () => syncScaleControls()));
+      map.on("zoomend moveend", () => {
+        updateScaleLabels();
+        renderMarkers();
+        renderDetailedBuildings();
+        renderZoneSummary();
+        updateLegend();
+        if (state.scaleLocked) {
+          elements.selectionTitle.textContent = "Генерация зафиксирована";
+          elements.selectionMeta.textContent = `${getCurrentScaleText()} · zoom работает, новые OSM-запросы отключены`;
+          updateLockScaleButton();
+          return;
+        }
+        if (state.osmSourceStatus === "loaded") updateOsmStatus();
+        scheduleOsmLoad();
+      });
+      elements.zoneButton.addEventListener("click", () => scheduleOsmLoad({ force: true }));
+      elements.lockScaleButton.addEventListener("click", toggleScaleLock);
+      elements.heightToggle.addEventListener("click", () => {
+        state.showMeters = !state.showMeters;
+        elements.heightToggle.innerHTML = state.showMeters ? '<i data-lucide="ruler"></i>Показ: метры' : '<i data-lucide="layers-3"></i>Показ: этажи';
+        renderDetailedBuildings();
+        updateLegend();
+        lucide.createIcons();
+      });
+      elements.themeToggle.addEventListener("click", () => {
+        document.body.classList.toggle("dark");
+        if (document.body.classList.contains("dark")) {
+          map.removeLayer(state.lightTiles);
+          state.darkTiles.addTo(map);
+          elements.themeToggle.innerHTML = '<i data-lucide="sun"></i>';
+        } else {
+          map.removeLayer(state.darkTiles);
+          state.lightTiles.addTo(map);
+          elements.themeToggle.innerHTML = '<i data-lucide="moon"></i>';
+        }
+        lucide.createIcons();
+      });
+      elements.panelToggle.addEventListener("click", () => document.body.classList.toggle("panel-open"));
+
+      initializeOpenDataControls();
+      syncOpenDataControls({ save: false });
+      renderLegend();
+      renderTypeOptions();
+      resetFilters();
+      syncScaleControls({ reload: false });
+      updateLockScaleButton();
+      scheduleOsmLoad();
+      lucide.createIcons();
+    </script>
+  </body>
+</html>
