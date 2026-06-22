@@ -27,6 +27,11 @@
         --red: #f44336;
         --purple: #9c27b0;
         --unknown: #1e88e5;
+        --topbar-h: 0px;
+      }
+
+      body.serov-tool-shell-active {
+        --topbar-h: 54px;
       }
 
       body.dark {
@@ -66,7 +71,7 @@
       .app {
         display: grid;
         grid-template-columns: 360px minmax(0, 1fr);
-        height: 100vh;
+        height: calc(100vh - var(--topbar-h));
         overflow: hidden;
       }
 
@@ -415,7 +420,7 @@
       #map {
         position: relative;
         min-width: 0;
-        height: 100vh;
+        height: calc(100vh - var(--topbar-h));
       }
 
       #map {
@@ -694,7 +699,7 @@
 
         .sidebar {
           position: fixed;
-          inset: 0 auto 0 0;
+          inset: var(--topbar-h) auto 0 0;
           width: min(360px, calc(100vw - 46px));
           transform: translateX(-100%);
           transition: transform 180ms ease;
@@ -1062,6 +1067,7 @@
 
       const map = L.map("map", { zoomControl: false, preferCanvas: true }).setView(INITIAL_CENTER, DEFAULT_DETAIL_ZOOM);
       L.control.zoom({ position: "bottomleft" }).addTo(map);
+      window.addEventListener("DOMContentLoaded", () => map.invalidateSize());
       state.lightTiles = L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
         maxZoom: 19,
         attribution: "&copy; OpenStreetMap &copy; CARTO",
