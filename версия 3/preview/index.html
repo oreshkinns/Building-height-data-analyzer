@@ -778,11 +778,6 @@
                 <span class="source-badge">база</span>
               </label>
               <label class="source-option">
-                <input type="checkbox" data-source-toggle value="nspd" checked />
-                <span><strong>НСПД / ПКК</strong><small>обогащение OSM по адресу/номеру</small></span>
-                <span class="source-badge">ПКК</span>
-              </label>
-              <label class="source-option">
                 <input type="checkbox" data-source-toggle value="neighbor-typology" checked />
                 <span><strong>Типология соседних зданий</strong><small>локальный fallback</small></span>
                 <span class="source-badge">оценка</span>
@@ -957,16 +952,10 @@
       ];
       const OPEN_DATA_SOURCES = [
         { id: "osm", title: "OSM", priority: 70, locked: true },
-        { id: "nspd", title: "НСПД / ПКК", priority: 90, direct: true },
         { id: "neighbor-typology", title: "Типология соседей", priority: 38, derived: true },
       ];
-      const DIRECT_SOURCE_IDS = ["nspd"];
-      const DEFAULT_ACTIVE_SOURCE_IDS = ["osm", "nspd", "neighbor-typology"];
+      const DEFAULT_ACTIVE_SOURCE_IDS = ["osm", "neighbor-typology"];
       const OPEN_DATA_CONFIG_VERSION = 3;
-      const NSPD_SEARCH_ENDPOINT = "https://nspd.gov.ru/api/geoportal/v2/search/geoportal";
-      const NSPD_MAX_LOOKUPS = 30;
-      const NSPD_LOOKUP_CONCURRENCY = 4;
-      const NSPD_ADDRESS_MATCH_RADIUS_METERS = 150;
       const SOURCE_STATUS_LABELS = { idle: "ожидает", loading: "загрузка", loaded: "готово", error: "ошибка" };
 
       function getStoredOpenDataConfig() {
@@ -1428,7 +1417,7 @@
 
       function cloneBuildingsForCache(buildings) {
         return buildings.map((building) => {
-          const { raw, nspdChecked, ...cachedBuilding } = building;
+          const { raw, ...cachedBuilding } = building;
           return {
             ...cachedBuilding,
             footprint: (building.footprint || []).map((point) => [point[0], point[1]]),
@@ -2253,230 +2242,6 @@
         return Number.isFinite(area) && area > 0 ? Math.round(area * 10) / 10 : null;
       }
 
-      function collectPayloadFeatures(payload) {
-        if (Array.isArray(payload)) return payload;
-        return (
-          payload?.features ||
-          payload?.data?.features ||
-          payload?.result?.features ||
-          payload?.items ||
-          payload?.data?.items ||
-          payload?.result?.items ||
-          payload?.data?.data?.features ||
-          []
-        );
-      }
-
-      function stringifyForCadastralSearch(value) {
-        try {
-          return JSON.stringify(value);
-        } catch {
-          return String(value || "");
-        }
-      }
-
-      function normalizeRichExternalFeature(feature, sourceId, confidence = 0.86) {
-        const attrs = feature?.attributes || feature?.properties || feature?.options || feature || {};
-        const nested = attrs.options || attrs.objectData || attrs.object_data || attrs.data || {};
-        const merged = { ...attrs, ...nested };
-        const geometry = projectGeometryToWgs84(feature?.geometry || attrs.geometry || nested.geometry || {});
-        const rings = geometry.rings || geometry.coordinates;
-        const footprint =
-          normalizeGeoJsonFootprint(geometry) ||
-          (Array.isArray(rings?.[0])
-            ? rings[0].map((point) => (Array.isArray(point) ? [Number(point[1]), Number(point[0])] : null)).filter((point) => point && Number.isFinite(point[0]) && Number.isFinite(point[1]))
-            : null);
-        const point = getPointFromExternalRecord({ ...merged, geometry }, footprint);
-        const { floors, heightMeters, floorsDerived, heightDerived } = deriveFloorsAndHeight(merged);
-        const cadastralNumber =
-          extractCadastralNumber(
-            pickFirstValue(merged, [
-              "cadnum",
-              "cad_num",
-              "cad_number",
-              "cadastralNumber",
-              "cadastral_number",
-              "CADNUM",
-              "CAD_NUM",
-              "CAD_NUMBER",
-              "KN_OKS",
-              "KAD_NUM",
-              "KADASTR",
-            ]),
-          ) || extractCadastralNumber(stringifyForCadastralSearch(merged));
-        const registryNumber = String(
-          pickFirstValue(merged, ["reestrNumber", "reestr_number", "registryNumber", "registry_number", "REGISTRY_NUMBER", "REESTR_NUMBER", "ACCOUNT_NUMBER", "OBJECTID", "id"]),
-        ).trim();
-        return {
-          sourceId,
-          id: String(pickFirstValue(merged, ["id", "object_id", "global_id", "OBJECTID", "fid", "uid", "uidRonew", "guid", "GUID"]) || registryNumber || cadastralNumber || ""),
-          name: String(pickFirstValue(merged, ["name", "NAME", "title", "objectName", "object_name", "building_name", "house", "HOUSE", "buildingNumber", "BUILDING_NUMBER"]) || "").trim(),
-          address: String(
-            pickFirstValue(merged, [
-              "address",
-              "ADDRESS",
-              "fullAddress",
-              "full_address",
-              "full_address_name",
-              "ADDRESS_STR",
-              "ADDR",
-              "address_name",
-              "building_address",
-              "readable_address",
-              "address_readable_address",
-            ]),
-          ).trim(),
-          lat: point?.[0],
-          lng: point?.[1],
-          footprint,
-          floors,
-          floorsDerived,
-          heightMeters,
-          heightDerived,
-          cadastralNumber,
-          registryNumber,
-          buildingType: String(pickFirstValue(merged, ["type", "TYPE", "objectType", "object_type", "OBJ_TYPE", "buildingType", "building_type", "CLASSID", "object_type_value"]) || "").trim(),
-          purpose: String(pickFirstValue(merged, ["purpose", "PURPOSE", "assignation", "ASSIGNATION", "Назначение", "usage", "USAGE", "permitted_use_name", "permitted_uses_name"]) || "").trim(),
-          areaSqm: parseAreaSqm(pickFirstValue(merged, ["area", "AREA", "areaSqm", "area_sqm", "square", "SQUARE", "Площадь общая (кв.м.)", "build_record_area"])),
-          yearBuilt: parseNumericTag(pickFirstValue(merged, ["yearBuilt", "year_built", "build_year", "YEAR_BLD", "builtYear", "params_year_built", "year_commisioning"])),
-          fiasAddressGuid: String(pickFirstValue(merged, ["fiasAddressGuid", "fias_address_guid", "FIAS_ADDRESS_GUID", "AOGUID", "aoGuid"]) || "").trim(),
-          fiasBuildingGuid: String(pickFirstValue(merged, ["fiasBuildingGuid", "fias_building_guid", "FIAS_BUILDING_GUID", "HOUSEGUID", "houseGuid"]) || "").trim(),
-          confidence,
-          raw: merged,
-        };
-      }
-
-      function getNspdSearchQuery(building) {
-        if (building.address) return building.address;
-        if (building.name && !building.name.startsWith("OSM ")) return building.name;
-        return "";
-      }
-
-      function getAddressMatchQuality(left, right) {
-        const stopWords = new Set(["г", "город", "ул", "улица", "пр", "проспект", "пер", "переулок", "д", "дом", "корпус", "корп", "строение", "стр"]);
-        const tokenize = (value) =>
-          String(value || "")
-            .toLocaleLowerCase("ru-RU")
-            .replaceAll("ё", "е")
-            .match(/[a-zа-я0-9]+/gi)
-            ?.filter((token) => !stopWords.has(token)) || [];
-        const leftTokens = tokenize(left);
-        const rightTokens = tokenize(right);
-        if (!leftTokens.length || !rightTokens.length) return 0;
-        const leftNumbers = leftTokens.filter((token) => /^\d+[a-zа-я]?$/.test(token));
-        const rightNumbers = rightTokens.filter((token) => /^\d+[a-zа-я]?$/.test(token));
-        if (leftNumbers.length && !leftNumbers.every((token) => rightNumbers.includes(token))) return 0;
-        const rightSet = new Set(rightTokens);
-        const matched = new Set(leftTokens.filter((token) => rightSet.has(token))).size;
-        return matched / Math.min(new Set(leftTokens).size, rightSet.size);
-      }
-
-      function getBuildingsForNspdLookup(buildings) {
-        const seen = new Set();
-        return buildings
-          .filter((building) => !building.nspdChecked && (building.cadastralNumber || getNspdSearchQuery(building)))
-          .filter((building) => {
-            const key = building.cadastralNumber || `addr:${getNspdSearchQuery(building)}:${building.lat?.toFixed(5)}:${building.lng?.toFixed(5)}`;
-            if (seen.has(key)) return false;
-            seen.add(key);
-            return true;
-          })
-          .slice(0, NSPD_MAX_LOOKUPS);
-      }
-
-      async function searchNspd(query) {
-        const url = new URL(NSPD_SEARCH_ENDPOINT);
-        url.searchParams.set("query", query);
-        url.searchParams.set("thematicSearchId", "1");
-        const payload = await fetchJsonDirect(url.toString(), { headers: { Accept: "application/json" } }, 6500);
-        return collectPayloadFeatures(payload).map((feature) => ({
-          feature,
-          record: normalizeRichExternalFeature(feature, "nspd", 0.86),
-        }));
-      }
-
-      async function fetchNspdRecordByCadastralNumber(cadastralNumber) {
-        const results = await searchNspd(cadastralNumber);
-        const match = results.find(
-          ({ record }) => record.cadastralNumber === cadastralNumber || extractCadastralNumber(stringifyForCadastralSearch(record.raw)) === cadastralNumber,
-        );
-        return match?.record || null;
-      }
-
-      async function fetchNspdRecordByAddress(building) {
-        const query = getNspdSearchQuery(building);
-        if (!query) return null;
-        const results = await searchNspd(query);
-        const candidates = results
-          .filter(({ record }) => Number.isFinite(record.lat) && Number.isFinite(record.lng))
-          .map(({ feature, record }) => ({
-            record,
-            isBuilding: /здани/i.test(String(feature?.properties?.categoryName || "")),
-            distance: distanceMeters({ lat: building.lat, lng: building.lng }, { lat: record.lat, lng: record.lng }),
-            addressQuality: getAddressMatchQuality(query, record.address),
-          }))
-          .sort((a, b) => Number(b.isBuilding) - Number(a.isBuilding) || b.addressQuality - a.addressQuality || a.distance - b.distance);
-        const buildingMatch = candidates.find(
-          (candidate) => candidate.isBuilding && candidate.addressQuality >= 0.65 && candidate.distance <= NSPD_ADDRESS_MATCH_RADIUS_METERS,
-        );
-        return buildingMatch?.record || null;
-      }
-
-      async function fetchNspdSource(bounds, buildings) {
-        const sourceId = "nspd";
-        const source = getSourceDefinition(sourceId);
-        const targets = getBuildingsForNspdLookup(buildings);
-        if (!targets.length) {
-          setSourceStatus(sourceId, "idle", "нет адресов/номеров");
-          return 0;
-        }
-        let changed = 0;
-        let completed = 0;
-        let timeouts = 0;
-        let nextIndex = 0;
-        let fatalError = null;
-        async function runLookupWorker() {
-          while (!fatalError && nextIndex < targets.length) {
-            const building = targets[nextIndex];
-            nextIndex += 1;
-            try {
-              const record = building.cadastralNumber ? await fetchNspdRecordByCadastralNumber(building.cadastralNumber) : await fetchNspdRecordByAddress(building);
-              building.nspdChecked = true;
-              if (record) {
-                if (applySourceRecord(building, record, source)) changed += 1;
-              }
-            } catch (error) {
-              const message = String(error?.message || "");
-              const isTimeout = error.name === "AbortError" || message.includes("aborted");
-              if (!isTimeout && (message.includes("HTTP 403") || message.includes("Failed to fetch") || message.includes("CORS"))) fatalError = error;
-              if (isTimeout) timeouts += 1;
-            } finally {
-              completed += 1;
-              setSourceStatus(sourceId, "loading", `ПКК ${completed}/${targets.length}`);
-            }
-          }
-        }
-        await Promise.all(Array.from({ length: Math.min(NSPD_LOOKUP_CONCURRENCY, targets.length) }, () => runLookupWorker()));
-        if (fatalError) throw fatalError;
-        const remaining = buildings.filter(
-          (building) => !building.nspdChecked && (building.cadastralNumber || getNspdSearchQuery(building)),
-        ).length;
-        const resultSummary = changed ? "ПКК обогащено" : timeouts ? `нет совпадений, таймаутов ${timeouts}` : "нет совпадений";
-        const summary = remaining ? `${resultSummary}; осталось ${remaining}, нажмите для продолжения` : resultSummary;
-        setSourceStatus(sourceId, "loaded", summary, changed);
-        return changed;
-      }
-
-      async function fetchDirectOpenSource(sourceId, bounds, buildings) {
-        try {
-          if (sourceId === "nspd") return await fetchNspdSource(bounds, buildings);
-          return 0;
-        } catch (error) {
-          setSourceStatus(sourceId, "error", getReadableFetchError(error));
-          return 0;
-        }
-      }
-
       function applyNeighborTypologyEstimate(buildings) {
         const sourceId = "neighbor-typology";
         const source = getSourceDefinition(sourceId);
@@ -2505,23 +2270,12 @@
       async function enrichBuildingsWithOpenSources(buildings, bounds, token, { osmStatus = "loaded", osmMessage = "Overpass" } = {}) {
         syncOpenDataControls({ save: false });
         setSourceStatus("osm", osmStatus, osmMessage, buildings.length);
-        DIRECT_SOURCE_IDS.filter((sourceId) => !isSourceActive(sourceId)).forEach((sourceId) => setSourceStatus(sourceId, "idle", "отключено"));
         if (isSourceActive("neighbor-typology")) applyNeighborTypologyEstimate(buildings);
         else setSourceStatus("neighbor-typology", "idle", "отключено");
         if (state.detailedBuildings === buildings) {
           renderTypeOptions();
           state.filtersTouched ? applyFilters() : resetFilters();
           updateOsmStatus();
-        }
-        for (const sourceId of DIRECT_SOURCE_IDS) {
-          if (token !== state.requestToken) return buildings;
-          if (!isSourceActive(sourceId)) continue;
-          await fetchDirectOpenSource(sourceId, bounds, buildings);
-          if (state.detailedBuildings === buildings) {
-            renderTypeOptions();
-            state.filtersTouched ? applyFilters() : resetFilters();
-            updateOsmStatus();
-          }
         }
         if (token !== state.requestToken) return buildings;
         if (isSourceActive("neighbor-typology")) applyNeighborTypologyEstimate(buildings);
@@ -2860,13 +2614,7 @@
           setSourceStatus(sourceId, "idle", "отключено");
           return;
         }
-        if (sourceId === "neighbor-typology") {
-          applyNeighborTypologyEstimate(buildings);
-        } else {
-          if (sourceId === "nspd") buildings.forEach((building) => delete building.nspdChecked);
-          const bounds = state.loadedBounds || getCurrentQueryBounds();
-          await fetchDirectOpenSource(sourceId, bounds, buildings);
-        }
+        applyNeighborTypologyEstimate(buildings);
         renderTypeOptions();
         state.filtersTouched ? applyFilters() : resetFilters();
         updateOsmStatus();
