@@ -742,6 +742,102 @@
           bottom: 122px;
         }
       }
+
+      /* Keep the map and its controls inside the shared depth workspace. */
+      body.serov-tool-shell-active.serov-tool-building-height-analyzer {
+        display: flow-root;
+        height: 100dvh;
+        min-height: 0;
+        overflow: hidden;
+        --panel: rgba(248, 252, 255, .9);
+        --panel-soft: rgba(236, 247, 254, .88);
+        --text: #364957;
+        --muted: #668197;
+        --line: rgba(111, 156, 190, .28);
+        --accent: #2e78bb;
+        --accent-strong: #246ba9;
+        --shadow: 0 12px 32px rgba(45, 83, 115, .1);
+      }
+      body.serov-tool-building-height-analyzer.dark {
+        --panel: rgba(24, 37, 50, .94);
+        --panel-soft: rgba(37, 55, 72, .92);
+        --text: #e7f2fb;
+        --muted: #a7bdcf;
+        --line: rgba(154, 189, 217, .28);
+        --accent: #75bfff;
+        --accent-strong: #9ed1ff;
+        --shadow: 0 16px 40px rgba(10, 28, 46, .25);
+      }
+      body.serov-tool-building-height-analyzer .app {
+        position: relative;
+        grid-template-columns: minmax(300px, 360px) minmax(0, 1fr);
+        gap: 12px;
+        width: min(1800px, calc(100% - clamp(32px, 6vw, 120px)));
+        height: calc(100dvh - clamp(86px, 5.8vw, 108px) - 24px);
+        min-height: 0;
+        margin: clamp(86px, 5.8vw, 108px) auto 24px;
+        padding: 12px;
+        border: 1px solid rgba(255, 255, 255, .82);
+        border-radius: clamp(24px, 3vw, 50px);
+        background: rgba(244, 251, 255, .24);
+        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .35), inset 0 0 90px rgba(255, 255, 255, .32);
+      }
+      body.serov-tool-building-height-analyzer .sidebar,
+      body.serov-tool-building-height-analyzer .map-shell {
+        min-width: 0;
+        min-height: 0;
+        height: 100%;
+        overflow: hidden;
+        border: 1px solid rgba(255, 255, 255, .76);
+        border-radius: 18px;
+        box-shadow: var(--shadow);
+      }
+      body.serov-tool-building-height-analyzer .sidebar {
+        background: var(--panel);
+        backdrop-filter: blur(18px);
+      }
+      body.serov-tool-building-height-analyzer .panel-scroll { min-height: 0; scrollbar-width: thin; }
+      body.serov-tool-building-height-analyzer .map-shell { background: #eaf4fb; }
+      body.serov-tool-building-height-analyzer #map { height: 100%; }
+      body.serov-tool-building-height-analyzer .brand { padding: 16px; }
+      body.serov-tool-building-height-analyzer .panel-scroll { padding: 16px; }
+      body.serov-tool-building-height-analyzer .selection,
+      body.serov-tool-building-height-analyzer .load-timer,
+      body.serov-tool-building-height-analyzer .detail-tools .ghost-button,
+      body.serov-tool-building-height-analyzer .summary-card,
+      body.serov-tool-building-height-analyzer .legend { border-radius: 12px; backdrop-filter: blur(16px); }
+      .panel-close { display: none; }
+      @media (max-width: 900px) {
+        body.serov-tool-building-height-analyzer .app {
+          grid-template-columns: minmax(0, 1fr);
+          width: calc(100% - 20px);
+          height: calc(100dvh - 88px);
+          margin-top: 78px;
+          padding: 10px;
+          border-radius: 24px;
+        }
+        body.serov-tool-building-height-analyzer .sidebar {
+          position: absolute;
+          inset: 10px auto 10px 10px;
+          width: min(360px, calc(100% - 20px));
+          height: calc(100% - 20px);
+          max-height: none;
+          z-index: 1000;
+        }
+        body.serov-tool-building-height-analyzer .map-shell { grid-column: 1; z-index: 0; }
+        body.serov-tool-building-height-analyzer .brand { gap: 8px; }
+        .panel-close { display: inline-flex; }
+        body.serov-tool-building-height-analyzer .detail-tools { top: 160px; bottom: auto; right: 14px; }
+      }
+      @media (max-width: 480px) {
+        body.serov-tool-building-height-analyzer .top-strip { top: 12px; left: 12px; right: 12px; }
+        body.serov-tool-building-height-analyzer .selection { min-width: 0; max-width: calc(100% - 52px); }
+        body.serov-tool-building-height-analyzer .detail-tools .ghost-button { min-height: 36px; padding: 7px 9px; font-size: 12px; }
+      }
+      @media (max-width: 360px) {
+        body.serov-tool-building-height-analyzer .load-timer { top: 112px; }
+        body.serov-tool-building-height-analyzer .detail-tools { top: 196px; }
+      }
     </style>
   </head>
   <body>
@@ -754,6 +850,9 @@
           </div>
           <button class="icon-button" id="themeToggle" type="button" title="Тема">
             <i data-lucide="moon"></i>
+          </button>
+          <button class="icon-button panel-close" id="panelClose" type="button" aria-label="Закрыть панель">
+            <i data-lucide="x"></i>
           </button>
         </header>
 
@@ -1068,6 +1167,7 @@
       const map = L.map("map", { zoomControl: false, preferCanvas: true }).setView(INITIAL_CENTER, DEFAULT_DETAIL_ZOOM);
       L.control.zoom({ position: "bottomleft" }).addTo(map);
       window.addEventListener("DOMContentLoaded", () => map.invalidateSize());
+      new ResizeObserver(() => map.invalidateSize()).observe(document.querySelector(".map-shell"));
       state.lightTiles = L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
         maxZoom: 19,
         attribution: "&copy; OpenStreetMap &copy; CARTO",
@@ -3087,6 +3187,7 @@
         lucide.createIcons();
       });
       elements.panelToggle.addEventListener("click", () => document.body.classList.toggle("panel-open"));
+      document.getElementById("panelClose").addEventListener("click", () => document.body.classList.remove("panel-open"));
 
       initializeOpenDataControls();
       syncOpenDataControls({ save: false });
@@ -3098,6 +3199,7 @@
       scheduleOsmLoad();
       lucide.createIcons();
     </script>
+    <script src="/assets/preview-depth-scene.js?v=0.1.0" defer></script>
     <script src="/assets/tool-shell.js" defer></script>
   </body>
 </html>
