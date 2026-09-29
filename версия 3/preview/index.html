@@ -46,6 +46,10 @@
         --shadow: 0 18px 44px rgba(0, 0, 0, 0.34);
       }
 
+      .leaflet-layer.basemap-dark img.leaflet-tile {
+        filter: invert(.88) hue-rotate(180deg) brightness(.78) saturate(.72);
+      }
+
       * {
         box-sizing: border-box;
       }
@@ -1168,13 +1172,17 @@
       L.control.zoom({ position: "bottomleft" }).addTo(map);
       window.addEventListener("DOMContentLoaded", () => map.invalidateSize());
       new ResizeObserver(() => map.invalidateSize()).observe(document.querySelector(".map-shell"));
-      state.lightTiles = L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
+      const osmAttribution = '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a>';
+      const osmTileUrl = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
+      state.lightTiles = L.tileLayer(osmTileUrl, {
         maxZoom: 19,
-        attribution: "&copy; OpenStreetMap &copy; CARTO",
+        attribution: osmAttribution,
+        className: "basemap-light",
       }).addTo(map);
-      state.darkTiles = L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+      state.darkTiles = L.tileLayer(osmTileUrl, {
         maxZoom: 19,
-        attribution: "&copy; OpenStreetMap &copy; CARTO",
+        attribution: osmAttribution,
+        className: "basemap-dark",
       });
       state.markers.addTo(map);
       state.detailPolygons.addTo(map);
