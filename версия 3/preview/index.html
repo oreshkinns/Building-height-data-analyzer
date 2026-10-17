@@ -885,6 +885,8 @@
                 <span><strong>OSM building:levels / height</strong><small>контуры, этажность, высота</small></span>
                 <span class="source-badge">база</span>
               </label>
+<label class="source-option"><input type="checkbox" data-source-toggle value="yandex" checked /><span><strong>Яндекс</strong><small>контуры и высота в метрах, без вывода этажности</small></span><span class="source-badge">высота</span></label>
+<label class="source-option"><input type="checkbox" data-source-toggle value="2gis" checked /><span><strong>2ГИС</strong><small>контуры и высота в метрах, без вывода этажности</small></span><span class="source-badge">высота</span></label>
               <label class="source-option">
                 <input type="checkbox" data-source-toggle value="neighbor-typology" checked />
                 <span><strong>Типология соседних зданий</strong><small>локальный fallback</small></span>
@@ -978,7 +980,7 @@
         <div class="detail-tools">
           <button class="ghost-button" id="lockScaleButton" type="button"><i data-lucide="lock"></i>Зафиксировать масштаб</button>
           <button class="ghost-button" id="zoneButton" type="button"><i data-lucide="refresh-cw"></i>Обновить зону</button>
-          <button class="ghost-button" id="heightToggle" type="button"><i data-lucide="ruler"></i>Показ: этажи</button>
+          <button class="ghost-button" id="heightToggle" type="button"><i data-lucide="ruler"></i>Показ: метры</button>
         </div>
         <div class="load-timer" id="loadTimerPanel" data-state="idle">
           <i data-lucide="timer"></i>
@@ -1009,6 +1011,8 @@
       src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
       crossorigin=""
     ></script>
+    <script src="vendor/polygon-clipping.umd.min.js"></script>
+    <script src="height-sources.js"></script>
     <script src="https://unpkg.com/papaparse@5.4.1/papaparse.min.js"></script>
     <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
     <script>
@@ -1038,6 +1042,7 @@
       const BACKGROUND_OVERPASS_LNG_SPAN = 0.02;
       const MAX_BACKGROUND_OSM_TILES = 96;
       const FLOOR_HEIGHT_METERS = 3.1;
+      const HEIGHT_METER_EDGES = [0, 3, 6, 9, 12, 18, 24, 36, 60, 100, Infinity];
       const UNKNOWN_DATA_COLOR = "#1E88E5";
       const OPEN_DATA_STORAGE_KEY = "building-height-open-data";
       const OPEN_DATA_CACHE_DB = "building-height-open-data-cache";
@@ -1060,11 +1065,17 @@
       ];
       const OPEN_DATA_SOURCES = [
         { id: "osm", title: "OSM", priority: 70, locked: true },
+        { id: "yandex", title: "Яндекс", priority: 65 },
+        { id: "2gis", title: "2ГИС", priority: 60 },
         { id: "neighbor-typology", title: "Типология соседей", priority: 38, derived: true },
       ];
-      const DEFAULT_ACTIVE_SOURCE_IDS = ["osm", "neighbor-typology"];
-      const OPEN_DATA_CONFIG_VERSION = 3;
-      const SOURCE_STATUS_LABELS = { idle: "ожидает", loading: "загрузка", loaded: "готово", error: "ошибка" };
+      const DEFAULT_ACTIVE_SOURCE_IDS = ["osm", "yandex", "2gis", "neighbor-typology"];
+      const OPEN_DATA_CONFIG_VERSION = 4;
+      const HEIGHT_SOURCE_IDS = ["yandex", "2gis"];
+      const heightSourceRequests = new Map();
+      const heightSourceControllers = new Set();
+      let sourceAvailability = new Map();
+      const SOURCE_STATUS_LABELS = { partial: "частично", idle: "ожидает", loading: "загрузка", loaded: "готово", error: "ошибка" };
 
       function getStoredOpenDataConfig() {
         try {
@@ -1075,10 +1086,10 @@
       }
 
       const storedOpenDataConfig = getStoredOpenDataConfig();
-      const storedActiveSourceIds =
-        Array.isArray(storedOpenDataConfig.activeSources) && storedOpenDataConfig.version === OPEN_DATA_CONFIG_VERSION
-          ? storedOpenDataConfig.activeSources
-          : DEFAULT_ACTIVE_SOURCE_IDS;
+      const storedActiveSourceIds = Array.isArray(storedOpenDataConfig.activeSources)
+        ? [...new Set([...storedOpenDataConfig.activeSources.filter((id) => OPEN_DATA_SOURCES.some((source) => source.id === id)),
+            ...(storedOpenDataConfig.version === OPEN_DATA_CONFIG_VERSION ? [] : HEIGHT_SOURCE_IDS)])]
+        : DEFAULT_ACTIVE_SOURCE_IDS;
       const demoBuildings = [
         ["ЖК Новый Мурино", 60.0489, 30.4426, 25, "г. Мурино, ул. Шоссейная", "монолитный", 2020],
         ["ЖК Кудрово Сити", 59.9082, 30.5122, 18, "г. Кудрово, ул. Ленинградская", "панельный", 2021],
@@ -1165,7 +1176,7 @@
         lightTiles: null,
         darkTiles: null,
         legendContainer: null,
-        showMeters: false,
+        showMeters: true,
       };
 
       const map = L.map("map", { zoomControl: false, preferCanvas: true }).setView(INITIAL_CENTER, DEFAULT_DETAIL_ZOOM);
@@ -1278,8 +1289,15 @@
       }
 
       function getBuildingLabel(building) {
-        if (state.showMeters) return Number.isFinite(building.heightMeters) ? `${building.heightMeters} м` : "н/д";
-        return Number.isFinite(building.floors) ? `${building.floors} эт.` : "н/д";
+        if (state.showMeters) return Number.isFinite(building.heightMeters) ? `${building.heightDerived ? "≈" : ""}${formatHeightMeters(building.heightMeters)}` : "н/д";
+        return Number.isFinite(building.floors) ? `${building.floorsDerived ? "≈" : ""}${building.floors} эт.` : Number.isFinite(building.heightMeters) ? "эт. н/д" : "н/д";
+      }
+
+      function getBuildingBounds(building) {
+        const geometry = building.geometry;
+        const coordinates = geometry?.type === "MultiPolygon" ? geometry.coordinates.flat(2)
+          : geometry?.type === "Polygon" ? geometry.coordinates.flat() : null;
+        return L.latLngBounds(coordinates?.length ? coordinates.map(([lng, lat]) => [lat, lng]) : building.footprint);
       }
 
       function getPolygonCenter(points) {
@@ -1364,7 +1382,7 @@
       }
 
       function syncOpenDataControls({ save = true } = {}) {
-        state.openData.activeSources = new Set(elements.sourceToggles.filter((input) => input.checked || input.disabled).map((input) => input.value));
+        state.openData.activeSources = new Set(elements.sourceToggles.filter((input) => input.checked || input.value === "osm").map((input) => input.value));
         if (save) saveOpenDataConfig();
         renderSourceStatuses();
       }
@@ -1444,6 +1462,9 @@
         if (state.loadMetrics.active && state.loadMetrics.token === token) {
           finishLoadTimer(token, { complete: false, phase, buildings: state.detailedBuildings.length });
         }
+        heightSourceControllers.forEach((controller) => controller.abort());
+        heightSourceControllers.clear();
+        heightSourceRequests.clear();
         state.requestToken += 1;
       }
 
@@ -1471,7 +1492,7 @@
 
       function initializeOpenDataControls() {
         elements.sourceToggles.forEach((input) => {
-          input.checked = input.disabled || state.openData.activeSources.has(input.value);
+          input.checked = input.value === "osm" || state.openData.activeSources.has(input.value);
         });
         OPEN_DATA_SOURCES.forEach((source) => setSourceStatus(source.id, "idle", "ожидает"));
       }
@@ -1505,6 +1526,7 @@
         return hashString(
           JSON.stringify({
             sources: [...state.openData.activeSources].sort(),
+            contract: "height-observations-2",
             loadZoom: state.scale.loadZoom,
           }),
         );
@@ -1544,16 +1566,18 @@
         if (!entry || !Array.isArray(entry.buildings) || !entry.buildings.length) return null;
         const bounds = deserializeBounds(entry.bounds);
         if (!bounds) return null;
+        const buildings = cloneBuildingsForCache(entry.buildings);
+        buildings.sourceCoverage = entry.sourceCoverage || {};
         return {
           ...entry,
           bounds,
-          buildings: cloneBuildingsForCache(entry.buildings),
+          buildings,
           updatedAt: Number(entry.updatedAt) || 0,
         };
       }
 
       function isCachedZoneFresh(entry) {
-        return Boolean(entry?.complete && entry.updatedAt) && Date.now() - entry.updatedAt < OPEN_DATA_CACHE_TTL_MS;
+        return Boolean(entry?.complete && entry.updatedAt && heightSourcesComplete(entry.buildings)) && Date.now() - entry.updatedAt < OPEN_DATA_CACHE_TTL_MS;
       }
 
       function openOpenDataCacheDb() {
@@ -1627,6 +1651,7 @@
           key: cacheKey,
           bounds: serializeBounds(bounds),
           buildings: cloneBuildingsForCache(buildings),
+          sourceCoverage: buildings.sourceCoverage || {},
           complete,
           updatedAt: Date.now(),
         };
@@ -1765,11 +1790,11 @@
         ];
       }
 
-      async function fetchOsmFromEndpoint(endpoint, query, bounds, timeoutMs = 26000) {
+      async function fetchOsmFromEndpoint(endpoint, query, bounds, timeoutMs = 26000, signal = null) {
         const errors = [];
         for (const variant of createOverpassRequestVariants(endpoint, query)) {
           try {
-            const payload = await fetchJsonDirect(variant.url, variant.options, timeoutMs);
+            const payload = await fetchJsonDirect(variant.url, { ...variant.options, signal }, timeoutMs);
             return {
               endpoint,
               transport: variant.label,
@@ -1777,6 +1802,7 @@
               footprints: parseOsmFootprints(payload, bounds),
             };
           } catch (error) {
+            if (signal?.aborted || error.name === "AbortError") throw error;
             errors.push(`${getEndpointHost(endpoint)} ${variant.label}: ${getReadableFetchError(error)}`);
           }
         }
@@ -1791,8 +1817,13 @@
 
       async function fetchOsmFootprintsDirect(queries, bounds, { allowEmpty = false, timeoutMs = 26000, endpointLimit = OVERPASS_ENDPOINTS.length } = {}) {
         const errors = [];
+        const token = state.requestToken;
         for (const query of queries) {
-          const tasks = getOverpassEndpoints(endpointLimit).map((endpoint) => fetchOsmFromEndpoint(endpoint, query, bounds, timeoutMs));
+          if (token !== state.requestToken) throw new DOMException("Zone changed", "AbortError");
+          const group = new AbortController();
+          heightSourceControllers.add(group);
+          const tasks = getOverpassEndpoints(endpointLimit).map((endpoint) => fetchOsmFromEndpoint(endpoint, query, bounds, timeoutMs, group.signal));
+          Promise.allSettled(tasks).then(() => heightSourceControllers.delete(group));
           if (allowEmpty) {
             try {
               return await Promise.any(
@@ -1802,7 +1833,7 @@
                     throw new Error(`${getEndpointHost(result.endpoint)}: 0 контуров из ${result.rawCount || 0} элементов`);
                   }),
                 ),
-              );
+              ).then((result) => { group.abort(); return result; });
             } catch {}
             const settled = await Promise.allSettled(tasks);
             const fulfilled = settled.filter((item) => item.status === "fulfilled").map((item) => item.value);
@@ -1821,7 +1852,7 @@
                   return result;
                 }),
               ),
-            );
+            ).then((result) => { group.abort(); return result; });
           } catch (error) {
             errors.push(...(error.errors || [error]).map((item) => item.message).filter(Boolean));
           }
@@ -1920,7 +1951,7 @@
             }
             return [];
           })
-          .filter((building) => bounds.intersects(L.latLngBounds(building.footprint)));
+          .filter((building) => bounds.intersects(getBuildingBounds(building)));
       }
 
       function getSlimBuilding(building) {
@@ -2036,7 +2067,7 @@
           record.params_height,
           record["Высота"],
         ].map(parseNumericTag).find((item) => Number.isFinite(item) && item > 0);
-        return Number.isFinite(value) ? Math.round(value) : null;
+        return Number.isFinite(value) ? value : null;
       }
 
       function deriveFloorsAndHeight(record) {
@@ -2044,10 +2075,6 @@
         let heightMeters = parseRawHeightFromExternalRecord(record);
         let floorsDerived = false;
         let heightDerived = false;
-        if (!Number.isFinite(floors) && Number.isFinite(heightMeters)) {
-          floors = Math.max(1, Math.round(heightMeters / FLOOR_HEIGHT_METERS));
-          floorsDerived = true;
-        }
         if (!Number.isFinite(heightMeters) && Number.isFinite(floors)) {
           heightMeters = Math.round(floors * FLOOR_HEIGHT_METERS);
           heightDerived = true;
@@ -2056,7 +2083,7 @@
       }
 
       function normalizeSourcePayload(payload, sourceId) {
-        const rawItems = Array.isArray(payload) ? payload : payload?.type === "FeatureCollection" ? payload.features : payload?.buildings || payload?.items || payload?.result?.items || [];
+        const rawItems = Array.isArray(payload) ? payload : payload?.type === "FeatureCollection" ? payload.features : payload?.records || payload?.buildings || payload?.items || payload?.result?.items || [];
         return rawItems
           .map((item) => {
             const properties = item.properties || item;
@@ -2073,6 +2100,10 @@
             return {
               id: String(properties.id || properties.object_id || properties.global_id || ""),
               sourceId,
+              sourceFeatureId: String(properties.sourceFeatureId || properties.id || ""),
+              sourcePartId: String(properties.sourcePartId || ""),
+              geometry,
+              rawHeight: properties.rawHeight,
               osmId: properties.osmId || properties.osm_id || "",
               name: properties.name || properties.full_name || properties.building_name || "",
               address: properties.address || properties.full_address_name || properties.address_name || "",
@@ -2119,7 +2150,16 @@
         const heightDerived = record.heightDerived === true || (!Number.isFinite(record.heightMeters) && Number.isFinite(floors));
         const confidence = record.confidence || 0.72;
         return {
-          id: `${sourceId}-${record.id || record.cadastralNumber || `${center[0].toFixed(6)}-${center[1].toFixed(6)}`}`,
+          id: `${sourceId}-${record.id || record.sourceFeatureId || record.cadastralNumber || `${center[0].toFixed(6)}-${center[1].toFixed(6)}`}-${record.sourcePartId || ""}-${record.rawHeight ?? ""}`,
+          sourceId,
+          sourceFeatureId: record.sourceFeatureId,
+          sourcePartId: record.sourcePartId,
+          sourceRecordId: record.id,
+          rawHeight: record.rawHeight,
+          geometry: record.geometry,
+          sourceRecordKeys: [BuildingHeightSources.recordKey(record)],
+          heightObservations: Number.isFinite(heightMeters) ? [{ key: BuildingHeightSources.recordKey(record), sourceId, source: source.title, sourceRecordId: record.id, sourceFeatureId: record.sourceFeatureId, sourcePartId: record.sourcePartId, heightMeters, heightDerived, rawHeight: record.rawHeight }] : [],
+          heightConflicts: [],
           osmId: record.osmId || "",
           name: record.name || record.address || `${source.title} объект`,
           address: record.address || "",
@@ -2159,19 +2199,7 @@
       }
 
       function findMatchingBuilding(buildings, record) {
-        if (record.cadastralNumber) {
-          const cadastralMatch = buildings.find((building) => building.cadastralNumber === record.cadastralNumber);
-          if (cadastralMatch) return cadastralMatch;
-        }
-        if (record.osmId) {
-          const osmMatch = buildings.find((building) => building.osmId === record.osmId);
-          if (osmMatch) return osmMatch;
-        }
-        if (!Number.isFinite(record.lat) || !Number.isFinite(record.lng)) return null;
-        const nearest = buildings
-          .map((building) => ({ building, distance: distanceMeters({ lat: building.lat, lng: building.lng }, { lat: record.lat, lng: record.lng }) }))
-          .sort((a, b) => a.distance - b.distance)[0];
-        return nearest && nearest.distance <= 85 ? nearest.building : null;
+        return BuildingHeightSources.findMatch(buildings, record);
       }
 
       function appendSourceTrace(building, sourceId, message, confidence) {
@@ -2188,6 +2216,13 @@
 
       function applySourceRecord(building, record, source) {
         let changed = false;
+        if (HEIGHT_SOURCE_IDS.includes(source.id)) {
+          BuildingHeightSources.observeHeight(building, record, source);
+          building.sourceRecordKeys ||= [];
+          const key = BuildingHeightSources.recordKey(record);
+          if (!building.sourceRecordKeys.includes(key)) building.sourceRecordKeys.push(key);
+          appendSourceTrace(building, source.id, "высота картографического источника", record.confidence);
+        }
         const priority = source.priority || 0;
         const confidence = record.confidence || 0.7;
         if (record.cadastralNumber && !building.cadastralNumber) {
@@ -2258,6 +2293,7 @@
           building.confidence = Math.max(building.confidence || 0, confidence);
           changed = true;
         }
+        if (Number.isFinite(record.heightMeters)) BuildingHeightSources.observeHeight(building, record, source);
         if (changed) appendSourceTrace(building, source.id, "атрибуты объединены", confidence);
         return changed;
       }
@@ -2319,6 +2355,10 @@
 
       async function fetchJsonDirect(url, options = {}, timeoutMs = 6000) {
         const controller = new AbortController();
+        heightSourceControllers.add(controller);
+        const onAbort = () => controller.abort();
+        if (options.signal?.aborted) controller.abort();
+        else options.signal?.addEventListener("abort", onAbort, { once: true });
         const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
         try {
           const response = await fetch(url, { ...options, signal: controller.signal });
@@ -2340,6 +2380,8 @@
           }
         } finally {
           window.clearTimeout(timeoutId);
+          options.signal?.removeEventListener("abort", onAbort);
+          heightSourceControllers.delete(controller);
         }
       }
 
@@ -2361,7 +2403,7 @@
         const source = getSourceDefinition(sourceId);
         let changed = 0;
         buildings.forEach((building) => {
-          if (Number.isFinite(building.floors)) return;
+          if (Number.isFinite(building.floors) || (Number.isFinite(building.heightMeters) && !building.heightDerived)) return;
           const neighbors = buildings
             .filter((candidate) => candidate !== building && Number.isFinite(candidate.floors))
             .map((candidate) => ({ building: candidate, distance: distanceMeters({ lat: building.lat, lng: building.lng }, { lat: candidate.lat, lng: candidate.lng }) }))
@@ -2381,19 +2423,72 @@
         return changed;
       }
 
+      async function loadHeightSource(sourceId, bounds, token) {
+        const unavailable = sourceAvailability.get(sourceId);
+        if (unavailable?.available === false) {
+          setSourceStatus(sourceId, "error", unavailable.reason || "источник недоступен");
+          return null;
+        }
+        const key = `${token}:${sourceId}:${getBoundsArray(bounds).join(",")}`;
+        if (heightSourceRequests.has(key)) return heightSourceRequests.get(key);
+        const controller = new AbortController();
+        heightSourceControllers.add(controller);
+        const timer = window.setTimeout(() => controller.abort(), 35000);
+        setSourceStatus(sourceId, "loading", "загружаю контуры и высоты");
+        const request = (async () => {
+          try {
+            const response = await fetch("/api/building-height-analyzer/buildings", {
+              method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ source: sourceId, bbox: getBoundsArray(bounds) }), signal: controller.signal,
+            });
+            const payload = await response.json();
+            if (!response.ok || payload.success !== true) throw new Error(payload.error || `HTTP ${response.status}`);
+            if (token !== state.requestToken) return null;
+            const records = normalizeSourcePayload(payload, sourceId);
+            const heights = records.filter((record) => Number.isFinite(record.heightMeters)).length;
+            const coverage = payload.coverage || { status: "partial" };
+            const note = coverage.status === "complete" ? records.length ? "готово" : "нет данных в области" : coverage.status === "partial" ? `частично ${coverage.loadedTiles ?? "?"}/${coverage.expectedTiles ?? "?"}` : "недоступен";
+            setSourceStatus(sourceId, coverage.status === "complete" ? "loaded" : coverage.status === "partial" ? "partial" : "error", `${note} · высот: ${heights}`, records.length);
+            return { records, coverage, sourceId, recipeVersion: payload.recipeVersion, decoderVersion: payload.decoderVersion, fetchedAt: payload.fetchedAt };
+          } catch (error) {
+            if (token === state.requestToken) setSourceStatus(sourceId, "error", controller.signal.aborted ? "загрузка отменена или превышено время" : error.message);
+            return null;
+          } finally {
+            window.clearTimeout(timer);
+            heightSourceControllers.delete(controller);
+          }
+        })();
+        heightSourceRequests.set(key, request);
+        return request;
+      }
+
       async function enrichBuildingsWithOpenSources(buildings, bounds, token, { osmStatus = "loaded", osmMessage = "Overpass" } = {}) {
         syncOpenDataControls({ save: false });
-        setSourceStatus("osm", osmStatus, osmMessage, buildings.length);
-        if (isSourceActive("neighbor-typology")) applyNeighborTypologyEstimate(buildings);
-        else setSourceStatus("neighbor-typology", "idle", "отключено");
-        if (state.detailedBuildings === buildings) {
-          renderTypeOptions();
-          state.filtersTouched ? applyFilters() : resetFilters();
-          updateOsmStatus();
-        }
+        setSourceStatus("osm", osmStatus, osmMessage, buildings.filter((b) => b.osmId).length);
+        await Promise.all(HEIGHT_SOURCE_IDS.map(async (sourceId) => {
+          if (!isSourceActive(sourceId)) { setSourceStatus(sourceId, "idle", "отключено"); return; }
+          const result = await loadHeightSource(sourceId, bounds, token);
+          if (token !== state.requestToken) return;
+          buildings.sourceCoverage ||= {};
+          buildings.sourceCoverage[sourceId] = result?.coverage || { status: "unavailable" };
+          if (result) {
+            mergeSourceRecords(buildings, result.records, sourceId);
+            commitDetailedBuildings(buildings, bounds, getBoundsKey(bounds), { complete: false });
+          }
+          if (state.detailedBuildings === buildings) {
+            renderTypeOptions();
+            state.filtersTouched ? applyFilters() : resetFilters();
+            updateOsmStatus();
+          }
+        }));
         if (token !== state.requestToken) return buildings;
         if (isSourceActive("neighbor-typology")) applyNeighborTypologyEstimate(buildings);
+        else setSourceStatus("neighbor-typology", "idle", "отключено");
         return buildings;
+      }
+
+      function heightSourcesComplete(buildings) {
+        return HEIGHT_SOURCE_IDS.filter(isSourceActive).every((id) => buildings.sourceCoverage?.[id]?.status === "complete");
       }
 
       function commitDetailedBuildings(buildings, bounds, cacheKey, { persist = true, complete = true } = {}) {
@@ -2403,7 +2498,7 @@
         if (cacheKey) {
           const previousCache = state.zoneCache.get(cacheKey);
           const canReuseCompleteState = previousCache?.complete === true && buildings.length >= (previousCache.buildings?.length || 0);
-          const cacheComplete = complete || canReuseCompleteState;
+          const cacheComplete = (complete || canReuseCompleteState) && heightSourcesComplete(buildings);
           state.zoneCache.set(cacheKey, { buildings, bounds, complete: cacheComplete, updatedAt: Date.now() });
           if (persist) scheduleOpenDataCacheWrite(cacheKey, buildings, bounds, { complete: cacheComplete });
         }
@@ -2427,6 +2522,14 @@
             }
             return;
           }
+          const sourceMatch = !building.isApproxFootprint ? findMatchingBuilding(buildings.filter((candidate) => candidate.sourceId), building) : null;
+          if (sourceMatch) {
+            applySourceRecord(sourceMatch, building, getSourceDefinition("osm"));
+            sourceMatch.osmId = building.osmId;
+            // Keep source part geometry, which may have a distinct height from another part.
+            added += 1;
+            return;
+          }
           knownIds.set(building.id, buildings.length);
           buildings.push(building);
           added += 1;
@@ -2441,7 +2544,7 @@
             if (!areQueryBoundsRelevant(viewBounds)) return;
             const added = appendUniqueBuildings(buildings, partsResult.footprints);
             if (!added) return;
-            setSourceStatus("osm", "loaded", `${sourceHost} + части`, buildings.length);
+            setSourceStatus("osm", "loaded", `${sourceHost} + части`, buildings.filter((building) => building.osmId).length);
             commitDetailedBuildings(buildings, viewBounds, cacheKey, { complete });
           })
           .catch(() => {});
@@ -2458,7 +2561,7 @@
             if (!areQueryBoundsRelevant(bounds)) return null;
             const added = appendUniqueBuildings(buildings, centerResult.footprints);
             if (added) {
-              setSourceStatus("osm", "loading", "быстрые центры", buildings.length);
+              setSourceStatus("osm", "loading", "быстрые центры", buildings.filter((building) => building.osmId).length);
               commitDetailedBuildings(buildings, bounds, cacheKey, { complete: false });
             }
             return { added, count: centerResult.footprints.length, errors: centerResult.errors || [] };
@@ -2492,7 +2595,7 @@
             addedBuildings += added;
             if (added) hasCommittedProgress = true;
             updateLoadTimer(token, { phase: attempt ? "повтор тайлов" : "тайлы", tilesLoaded: loadedTiles, tilesFailed: failedTiles, tilesTotal: tiles.length, buildings: buildings.length });
-            setSourceStatus("osm", "loading", `${sourceHost} · ${loadedTiles}/${tiles.length}${failedTiles ? `, ошибок ${failedTiles}` : ""}`, buildings.length);
+            setSourceStatus("osm", "loading", `${sourceHost} · ${loadedTiles}/${tiles.length}${failedTiles ? `, ошибок ${failedTiles}` : ""}`, buildings.filter((building) => building.osmId).length);
             if (added) commitDetailedBuildings(buildings, bounds, cacheKey, { complete: false });
           } catch (error) {
             if (attempt === 0) {
@@ -2502,7 +2605,7 @@
             failedTiles += 1;
             if (!firstError) firstError = error;
             updateLoadTimer(token, { phase: "повтор тайлов", tilesLoaded: loadedTiles, tilesFailed: failedTiles, tilesTotal: tiles.length, buildings: buildings.length });
-            setSourceStatus("osm", buildings.length ? "loading" : "error", `${sourceHost} · ${loadedTiles}/${tiles.length}, ошибок ${failedTiles}`, buildings.length);
+            setSourceStatus("osm", buildings.length ? "loading" : "error", `${sourceHost} · ${loadedTiles}/${tiles.length}, ошибок ${failedTiles}`, buildings.filter((building) => building.osmId).length);
           }
         };
 
@@ -2527,7 +2630,7 @@
         if (token === state.requestToken) {
           const complete = loadedTiles === tiles.length && failedTiles === 0;
           const message = complete ? sourceHost : `${sourceHost} · частично ${loadedTiles}/${tiles.length}${failedTiles ? `, ошибок ${failedTiles}` : ""}`;
-          setSourceStatus("osm", complete ? "loaded" : buildings.length ? "loading" : "error", message, buildings.length);
+          setSourceStatus("osm", complete ? "loaded" : buildings.length ? "loading" : "error", message, buildings.filter((building) => building.osmId).length);
           if (buildings.length && (hasCommittedProgress || !state.zoneCache.get(cacheKey)?.complete)) commitDetailedBuildings(buildings, bounds, cacheKey, { complete });
           finishLoadTimer(token, { complete, phase: complete ? "полная прогрузка" : "частично, есть пустые места", buildings: buildings.length });
         }
@@ -2594,6 +2697,10 @@
           updateLoadTimer(token, { phase: cached.complete === false ? "кеш + обновление" : "кеш", buildings: cached.buildings.length });
           setSourceStatus("osm", "loaded", cached.complete === false ? "кеш + обновление" : "кеш", cached.buildings.length);
           if (!force && isCachedZoneFresh(cached)) {
+            HEIGHT_SOURCE_IDS.filter(isSourceActive).forEach((id) => {
+              const count = cached.buildings.filter((building) => (building.sources || []).some((source) => source.id === id)).length;
+              setSourceStatus(id, "loaded", "кеш", count);
+            });
             finishLoadTimer(token, { complete: true, phase: "кеш", buildings: cached.buildings.length });
             return;
           }
@@ -2608,6 +2715,8 @@
         renderZoneSummary();
         let lastError = null;
         const liveBuildings = [];
+        // Providers start with OSM, so a slow Overpass mirror does not hold up source heights.
+        enrichOpenDataInBackground(liveBuildings, bounds, token, cacheKey, { cacheComplete: false, osmStatus: "loading" });
         let centerLoadPromise = null;
         let tileLoadPromise = null;
         let tileLoadSummary = null;
@@ -2618,7 +2727,7 @@
           if (!areQueryBoundsRelevant(bounds)) return true;
           if (centerSummary?.error) lastError = centerSummary.error;
           else if (centerSummary?.errors?.length && !centerSummary.count) lastError = new Error(centerSummary.errors[0]);
-          if (!liveBuildings.length) return false;
+          if (!liveBuildings.some((building) => building.osmId)) return false;
           enrichOpenDataInBackground(liveBuildings, bounds, token, cacheKey, {
             osmStatus: "loaded",
             cacheComplete: false,
@@ -2634,7 +2743,7 @@
           if (token !== state.requestToken) return true;
           if (!areQueryBoundsRelevant(bounds)) return true;
           if (tileLoadSummary?.error && !liveBuildings.length) lastError = tileLoadSummary.error;
-          if (!liveBuildings.length) return false;
+          if (!liveBuildings.some((building) => building.osmId)) return false;
           enrichOpenDataInBackground(liveBuildings, bounds, token, cacheKey, {
             osmStatus: "loaded",
             cacheComplete: tileLoadSummary?.complete === true,
@@ -2659,7 +2768,7 @@
           appendUniqueBuildings(liveBuildings, osmResult.footprints);
           if (liveBuildings.length) {
             const host = getEndpointHost(osmResult.endpoint);
-            setSourceStatus("osm", isPartialOsmBounds ? "loading" : "loaded", isPartialOsmBounds ? `${host} · центр` : host, liveBuildings.length);
+            setSourceStatus("osm", isPartialOsmBounds ? "loading" : "loaded", isPartialOsmBounds ? `${host} · центр` : host, liveBuildings.filter((building) => building.osmId).length);
             commitDetailedBuildings(liveBuildings, bounds, cacheKey, { complete: !isPartialOsmBounds });
             updateLoadTimer(token, { phase: isPartialOsmBounds ? "центр + тайлы" : "полная зона", buildings: liveBuildings.length });
             if (!isPartialOsmBounds) finishLoadTimer(token, { complete: true, phase: "полная прогрузка", buildings: liveBuildings.length });
@@ -2698,9 +2807,14 @@
         const osmError = getReadableOsmError(lastError || new Error("ошибка сети"));
         finishLoadTimer(token, { complete: false, phase: osmError, buildings: state.detailedBuildings.length });
         setSourceStatus("osm", "error", osmError);
-        elements.status.textContent = `Не удалось загрузить OSM-контуры: ${osmError}`;
-        elements.status.classList.add("error");
-        elements.selectionMeta.textContent = "Контуры не загружены, проверь сеть или Overpass";
+        if (liveBuildings.length) {
+          updateOsmStatus();
+          elements.selectionMeta.textContent = `OSM недоступен: ${osmError}; здания других источников доступны`;
+        } else {
+          elements.status.textContent = `Не удалось загрузить OSM-контуры: ${osmError}`;
+          elements.status.classList.add("error");
+          elements.selectionMeta.textContent = "Контуры не загружены, проверь сеть или Overpass";
+        }
         renderDetailedBuildings();
         renderZoneSummary();
         updateLegend();
@@ -2720,6 +2834,16 @@
           return;
         }
         const buildings = state.detailedBuildings;
+        if (HEIGHT_SOURCE_IDS.includes(sourceId)) {
+          const token = state.requestToken;
+          const bounds = getCurrentQueryBounds();
+          const cacheKey = getBoundsKey(bounds);
+          heightSourceRequests.clear();
+          await enrichBuildingsWithOpenSources(buildings, bounds, token);
+          if (token !== state.requestToken) return;
+          commitDetailedBuildings(buildings, bounds, cacheKey, { complete: state.osmSourceStatus === "loaded" });
+          return;
+        }
         if (!buildings.length) {
           setSourceStatus(sourceId, "idle", "нет зданий в зоне");
           return;
@@ -2766,7 +2890,7 @@
 
       function getVisibleDetailBuildings() {
         const visibleBounds = map.getBounds().pad(0.04);
-        return getFilteredDetailBuildings().filter((building) => visibleBounds.intersects(L.latLngBounds(building.footprint)));
+        return getFilteredDetailBuildings().filter((building) => visibleBounds.intersects(getBuildingBounds(building)));
       }
 
       function renderMarkers() {
@@ -2779,7 +2903,7 @@
             <div class="popup-title">${escapeHtml(building.name)}</div>
             <div class="popup-line">${escapeHtml(building.address || "Адрес не указан")}</div>
             <div class="popup-line"><strong>${building.floors}</strong> этажей</div>
-            <div class="popup-line">Высота: ${Number.isFinite(building.heightMeters) ? `${building.heightMeters} м` : "нет данных"}</div>
+            <div class="popup-line">Высота: ${Number.isFinite(building.heightMeters) ? formatHeightMeters(building.heightMeters) : "нет данных"}</div>
             <div class="popup-line">${escapeHtml(building.cadastralNumber || "кадастровый номер не указан")} · ${escapeHtml(building.source || "CSV")}</div>
             <div class="popup-line">${escapeHtml(building.buildingType || "тип не указан")} · ${escapeHtml(building.yearBuilt || "год не указан")}</div>
           `);
@@ -2799,12 +2923,17 @@
         const isSummaryScale = map.getZoom() < state.scale.detailZoom;
         const visibleBounds = map.getBounds().pad(0.12);
         getFilteredDetailBuildings()
-          .filter((building) => visibleBounds.intersects(L.latLngBounds(building.footprint)))
+          .filter((building) => visibleBounds.intersects(getBuildingBounds(building)))
           .forEach((building) => {
-            const color = getExactFloorColor(building.floors);
-            const hasFloors = Number.isFinite(building.floors);
-            const heightText = Number.isFinite(building.heightMeters) ? `${building.heightMeters} м` : "нет данных";
-            const polygon = L.polygon(building.footprint, {
+            const color = getBuildingColor(building);
+            const hasFloors = state.showMeters ? Number.isFinite(building.heightMeters) : Number.isFinite(building.floors);
+            const heightText = Number.isFinite(building.heightMeters) ? formatHeightMeters(building.heightMeters) : "нет данных";
+            const polygonPoints = building.geometry?.type === "Polygon"
+              ? building.geometry.coordinates.map((ring) => ring.map(([lng, lat]) => [lat, lng]))
+              : building.geometry?.type === "MultiPolygon"
+                ? building.geometry.coordinates.map((polygon) => polygon.map((ring) => ring.map(([lng, lat]) => [lat, lng])))
+                : building.footprint;
+            const polygon = L.polygon(polygonPoints, {
               color,
               fillColor: color,
               fillOpacity: hasFloors ? (isSummaryScale ? 0.26 : 0.34) : 0.2,
@@ -2816,8 +2945,10 @@
             polygon.bindPopup(`
               <div class="popup-title">${escapeHtml(building.name)}</div>
               <div class="popup-line">${escapeHtml(building.address || "Адрес не указан")}</div>
-              <div class="popup-line"><strong>${escapeHtml(getFloorLabel(building.floors))}</strong></div>
+              <div class="popup-line"><strong>${escapeHtml(Number.isFinite(building.floors) ? `${building.floorsDerived ? "≈ " : ""}${getFloorLabel(building.floors)}` : Number.isFinite(building.heightMeters) ? "есть высота, этажность неизвестна" : "этажность неизвестна")}</strong></div>
               <div class="popup-line">Высота: ${escapeHtml(heightText)}</div>
+              <div class="popup-line">Источник высоты: ${escapeHtml(building.heightSource || "не указан")}${building.heightDerived ? " · оценка" : ""}</div>
+              <div class="popup-line">${escapeHtml((building.heightConflicts || []).map((observation) => `${observation.source}: ${formatHeightMeters(observation.heightMeters)}`).join("; "))}</div>
               <div class="popup-line">Источник этажности: ${escapeHtml(building.floorSource || "не указан")}</div>
               <div class="popup-line">Источники: ${escapeHtml(getSourceSummary(building))}</div>
               <div class="popup-line">${escapeHtml(building.cadastralNumber || "кадастровый номер не указан")} · ${escapeHtml(getConfidenceLabel(building))}</div>
@@ -2896,9 +3027,9 @@
         elements.summaryMinFloors.textContent = floorStats ? formatNumber(floorStats.min) : "-";
         elements.summaryAvgFloors.textContent = floorStats ? formatNumber(floorStats.avg) : "-";
         elements.summaryMaxFloors.textContent = floorStats ? formatNumber(floorStats.max) : "-";
-        elements.summaryMinHeight.textContent = heightStats ? formatNumber(heightStats.min, " м") : "-";
-        elements.summaryAvgHeight.textContent = heightStats ? formatNumber(heightStats.avg, " м") : "-";
-        elements.summaryMaxHeight.textContent = heightStats ? formatNumber(heightStats.max, " м") : "-";
+        elements.summaryMinHeight.textContent = heightStats ? formatHeightMeters(heightStats.min) : "-";
+        elements.summaryAvgHeight.textContent = heightStats ? formatHeightMeters(heightStats.avg) : "-";
+        elements.summaryMaxHeight.textContent = heightStats ? formatHeightMeters(heightStats.max) : "-";
       }
 
       function renderLegend() {
@@ -2912,30 +3043,50 @@
         legend.addTo(map);
       }
 
+      function formatHeightMeters(value) {
+        return Number.isFinite(value) ? `${new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 1 }).format(value)} м` : "н/д";
+      }
+
+      function getHeightBin(value) {
+        if (!Number.isFinite(value) || value < 0) return null;
+        // Match the displayed precision so floating noise cannot create adjacent color bins.
+        const rounded = Math.round(value * 10) / 10;
+        return HEIGHT_METER_EDGES.findIndex((edge, index) => index > 0 && rounded < edge) - 1;
+      }
+
+      function getHeightBinColor(index) {
+        if (index === null || index < 0) return UNKNOWN_DATA_COLOR;
+        const lower = HEIGHT_METER_EDGES[index];
+        const upper = HEIGHT_METER_EDGES[index + 1];
+        return getExactFloorColor((Number.isFinite(upper) ? (lower + upper) / 2 : lower) / FLOOR_HEIGHT_METERS);
+      }
+
+      function getHeightLegendEntries(buildings) {
+        const indices = [...new Set(buildings.map((building) => getHeightBin(building.heightMeters)).filter((index) => index !== null))].sort((a, b) => a - b);
+        return indices.map((index) => {
+          const lower = HEIGHT_METER_EDGES[index];
+          const upper = HEIGHT_METER_EDGES[index + 1];
+          return { color: getHeightBinColor(index), label: lower === 0 ? `<${upper} м` : Number.isFinite(upper) ? `${lower}–${upper} м` : `≥${lower} м` };
+        });
+      }
+
+      function getBuildingColor(building) {
+        return state.showMeters ? getHeightBinColor(getHeightBin(building.heightMeters)) : getExactFloorColor(building.floors);
+      }
+
       function updateLegend() {
         if (!state.legendContainer) return;
-        const exactMode = map.getZoom() >= state.scale.detailZoom;
-        if (!exactMode) {
-          state.legendContainer.style.display = "none";
-          return;
-        }
-        state.legendContainer.style.display = "block";
+        state.legendContainer.style.display = map.getZoom() >= state.scale.detailZoom ? "block" : "none";
         const source = getFilteredDetailBuildings();
-        const exactFloors = [...new Set(source.map((building) => building.floors).filter(Number.isFinite))].sort((a, b) => a - b);
-        const unknownCount = source.filter((building) => !Number.isFinite(building.floors)).length;
-        const loadingNote = state.osmSourceStatus === "loading" ? `<div class="legend-row"><span class="legend-dot" style="background:${UNKNOWN_DATA_COLOR}"></span><span>загрузка источников...</span></div>` : "";
-        const unknownRow = unknownCount ? `<div class="legend-row"><span class="legend-dot" style="background:${UNKNOWN_DATA_COLOR}"></span><span>контур без этажности: ${unknownCount}</span></div>` : "";
-        state.legendContainer.innerHTML = `
-          <div class="legend-title">${state.showMeters ? "Высота и этажность" : "Точная этажность"}</div>
-          ${loadingNote}
-          ${exactFloors
-            .map((floors) => {
-              const meters = Math.round(floors * FLOOR_HEIGHT_METERS);
-              return `<div class="legend-row"><span class="legend-dot" style="background:${getExactFloorColor(floors)}"></span><span>${state.showMeters ? `${meters} м · ${getFloorLabel(floors)}` : getFloorLabel(floors)}</span></div>`;
-            })
-            .join("")}
-          ${unknownRow}
-        `;
+        const valueOf = (b) => state.showMeters ? b.heightMeters : b.floors;
+        const values = [...new Set(source.map(valueOf).filter(Number.isFinite))].sort((a,b) => a-b);
+        const unknownCount = source.filter((b) => !Number.isFinite(valueOf(b))).length;
+        const heightOnly = source.filter((b) => !Number.isFinite(b.floors) && Number.isFinite(b.heightMeters)).length;
+        const entries = state.showMeters ? getHeightLegendEntries(source) : values.map((value) => ({ color: getExactFloorColor(value), label: getFloorLabel(value) }));
+        state.legendContainer.innerHTML = `<div class="legend-title">${state.showMeters ? "Высота, м" : "Этажность"} · ≈ оценка</div>` +
+          entries.map((entry) => `<div class="legend-row"><span class="legend-dot" style="background:${entry.color}"></span><span>${escapeHtml(entry.label)}</span></div>`).join("") +
+          (unknownCount ? `<div class="legend-row"><span class="legend-dot" style="background:${UNKNOWN_DATA_COLOR}"></span><span>${state.showMeters ? "высота неизвестна" : "этажность неизвестна"}: ${unknownCount}</span></div>` : "") +
+          (!state.showMeters && heightOnly ? `<div class="legend-row">есть высота, этажность неизвестна: ${heightOnly}</div>` : "");
       }
 
       function renderTypeOptions() {
@@ -3114,7 +3265,11 @@
         const file = event.target.files[0];
         if (file) parseCsvFile(file);
       });
-      elements.sourceToggles.forEach((input) => input.addEventListener("change", () => syncOpenDataControls()));
+      elements.sourceToggles.forEach((input) => input.addEventListener("change", () => {
+        syncOpenDataControls();
+        state.loadedBounds = null;
+        scheduleOsmLoad({ force: true });
+      }));
       elements.sourceStatusList.addEventListener("click", (event) => {
         const button = event.target.closest("[data-source-reload]");
         if (!button || button.disabled) return;
@@ -3198,6 +3353,21 @@
       document.getElementById("panelClose").addEventListener("click", () => document.body.classList.remove("panel-open"));
 
       initializeOpenDataControls();
+      fetch("/api/building-height-analyzer/sources", { credentials: "same-origin" })
+        .then((response) => response.ok ? response.json() : Promise.reject(new Error("sources unavailable")))
+        .then((payload) => {
+          sourceAvailability = new Map((payload.sources || []).map((source) => [source.id, source]));
+          elements.sourceToggles.forEach((input) => {
+            const source = sourceAvailability.get(input.value);
+            if (source?.available === false) {
+              input.disabled = true;
+              input.checked = false;
+              state.openData.activeSources.delete(input.value);
+              input.closest("label").title = source.reason || "источник недоступен";
+              setSourceStatus(input.value, "error", source.reason || "источник недоступен");
+            }
+          });
+        }).catch(() => {});
       syncOpenDataControls({ save: false });
       renderLegend();
       renderTypeOptions();
