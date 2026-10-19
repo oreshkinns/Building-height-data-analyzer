@@ -1013,6 +1013,7 @@
     ></script>
     <script src="vendor/polygon-clipping.umd.min.js"></script>
     <script src="height-sources.js"></script>
+    <script src="height-client.js"></script>
     <script src="https://unpkg.com/papaparse@5.4.1/papaparse.min.js"></script>
     <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
     <script>
@@ -2437,17 +2438,12 @@
         setSourceStatus(sourceId, "loading", "загружаю контуры и высоты");
         const request = (async () => {
           try {
-            const query = new URLSearchParams({ source: sourceId, bbox: getBoundsArray(bounds).join(",") });
-            const response = await fetch(`/api/building-height-analyzer/buildings?${query}`, {
-              method: "GET", credentials: "same-origin", signal: controller.signal,
-            });
-            const payload = await response.json();
-            if (!response.ok || payload.success !== true) throw new Error(payload.error || `HTTP ${response.status}`);
+            const payload = await BuildingHeightClient.load(sourceId, getBoundsArray(bounds), { signal: controller.signal });
             if (token !== state.requestToken) return null;
             const records = normalizeSourcePayload(payload, sourceId);
             const heights = records.filter((record) => Number.isFinite(record.heightMeters)).length;
             const coverage = payload.coverage || { status: "partial" };
-            const note = coverage.status === "complete" ? records.length ? "готово" : "нет данных в области" : coverage.status === "partial" ? `частично ${coverage.loadedTiles ?? "?"}/${coverage.expectedTiles ?? "?"}` : "недоступен";
+            const note = coverage.status === "complete" ? records.length ? "готово · через браузер" : "нет данных в области" : coverage.status === "partial" ? `частично ${coverage.loadedTiles ?? "?"}/${coverage.expectedTiles ?? "?"}` : "недоступен из браузера";
             setSourceStatus(sourceId, coverage.status === "complete" ? "loaded" : coverage.status === "partial" ? "partial" : "error", `${note} · высот: ${heights}`, records.length);
             return { records, coverage, sourceId, recipeVersion: payload.recipeVersion, decoderVersion: payload.decoderVersion, fetchedAt: payload.fetchedAt };
           } catch (error) {
